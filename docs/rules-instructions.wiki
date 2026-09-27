@@ -1,0 +1,193 @@
+<!--
+  Instructions for people adding ParamBot rules. This belongs on the wiki at
+  [[User:ParamBot/Rules/Instructions]], transcluded at the top of
+  [[User:ParamBot/Rules]] with {{User:ParamBot/Rules/Instructions}}.
+
+  Every <syntaxhighlight> example here is checked by tests/test_docs.py and
+  must be valid. Never put an example rules table outside <syntaxhighlight>:
+  on the rules page the bot would obey it.
+-->
+[[User:ParamBot|ParamBot]] reads this page to find out which template parameters to fix.
+
+When a template stops accepting an old parameter name (for example {{tl|Infobox settlement}} replacing {{para|imagesize}} with {{para|image_size}}), a revert can put the old name back into an article. The infobox then silently drops that information and the article shows up in the template's "unknown parameters" category. Once a day, ParamBot checks those categories and renames the old parameters to the new ones. It changes nothing else.
+
+'''Only add renames that already have consensus.''' Usually that means the template's deprecated-parameter check listed them.
+
+== Adding a template ==
+Each template gets a table, with the old parameter names on the left and the new names on the right.
+
+# Edit this page. At the bottom, add a heading with the template's name.
+# Copy the example table below and paste it under your heading.
+# In the caption line (the one starting <code>|+</code>), change the template's name to yours.
+# Change the rows so that each one holds an old name and its new name. Each row starts with a <code>|-</code> line; add one row per old name.
+# Save.
+
+<syntaxhighlight lang="wikitext">
+== Infobox settlement ==
+{| class="wikitable"
+|+ {{tl|Infobox settlement}}
+! Old parameter !! New parameter
+|-
+| {{para|settlement_type}} || {{para|type}}
+|-
+| {{para|imagesize}} || {{para|image_size}}
+|-
+| {{para|image_caption}} || {{para|caption}}
+|}
+</syntaxhighlight>
+
+On the page, this shows as an ordinary table.
+
+'''Already have the list in a table?''' If the renames are already in a wikitable, for example on the template's talk page, paste that table as it is. Then add a caption line straight after the <code>{|</code> line: <code><nowiki>|+ {{tl|Template name}}</nowiki></code>. The first column must hold the old names and the second the new ones. Any other columns are notes, unless one is headed ''If both are set'' ([[#If both parameters are filled in|see below]]).
+
+'''Does the template still have a deprecated-parameter block?''' The bot operator can turn it into a table for you. Ask on [[User talk:ParamBot]].
+
+'''Is the template already on this page?''' Add rows to its table instead of starting another one.
+
+You don't have to wait until the template drops the old names. A rule does nothing while the template still accepts its old name, and starts working by itself once that name is removed.
+
+== Writing rows ==
+* '''Old name on the left, new name on the right.'''
+* Write each name as {{tlx|para|name}}. Anything else in the cell is a note, which the bot ignores, such as <code><nowiki>{{para|spouse}} (will use {{tl|pluralize from text}})</nowiki></code>.
+* Copy names exactly. Capital letters matter: {{para|Imagesize}} and {{para|imagesize}} are different parameters. Spaces are fine, for example {{para|honorific prefix}}.
+* '''Numbered parameters:''' put <code>#</code> where the number goes, in both names. Two numbers work too, as in {{para|blank#_name_sec#}} → {{para|custom_label#_sec#}}.
+* '''Parameters with no replacement:''' write <code>remove</code> in the new-name column. If one of these comes back, the bot deletes it and its value.
+* '''Several old names with the same new name''' can each have a row, share a row (<code><nowiki>{{para|alma_mater}} {{para|alma mater}}</nowiki></code>), or share one new-name cell using <code>rowspan</code>.
+* You don't need extra rows for redirects to the template. The bot finds them itself.
+
+<syntaxhighlight lang="wikitext">
+{| class="wikitable"
+|+ {{tl|Infobox officeholder}}
+! Old parameter !! New parameter
+|-
+| {{para|termstart#}} || {{para|term_start#}}
+|-
+| {{para|spouse(s)}}
+| rowspan=2 | {{para|spouse}} (will use {{tl|pluralize from text}})
+|-
+| {{para|spouses}}
+|-
+| {{para|nationality}} || remove
+|}
+</syntaxhighlight>
+
+How the <code>#</code> row above works:
+{| class="wikitable"
+! Article has !! Bot changes it to
+|-
+| <code>termstart</code> || <code>term_start</code>
+|-
+| <code>termstart2</code> || <code>term_start2</code>
+|-
+| <code>termstart12</code> || <code>term_start12</code>
+|-
+| <code>termstarts</code> || ''no change: # only stands for a number''
+|}
+
+== Before you save ==
+Check that:
+* the table has a caption line, starting <code>|+</code>, straight after the <code>{|</code> line, naming the template
+* the old names are in the first column and the new names in the second
+* each row has one new name, or <code>remove</code>
+* a <code>#</code> is in both names or in neither
+* any example tables you wrote in a discussion on this page are inside <code><nowiki><syntaxhighlight lang="wikitext"> ... </syntaxhighlight></nowiki></code>. '''If they aren't, the bot will obey them.'''
+
+== Checking your rules ==
+After the bot's next daily run, look at [[User:ParamBot/Report]].
+* '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a table with no caption, or a rename to a name the template doesn't accept. Fix those on this page.
+* A '''Notes''' entry saying the template "still accepts" an old name is normal: nothing is broken yet, so the rule waits. If you meant the row the other way round, swap its two names.
+* '''Needs human review''' lists articles where the old and the new parameter are both filled in with different values. The bot leaves those alone. Fix them by hand.
+
+The bot checks every table on every run, so you don't have to wait for an article to need your rule before finding a mistake.
+
+'''Want to see your rules in action?''' Put an infobox that uses the old names in your sandbox, and ask the bot operator on [[User talk:ParamBot]] to preview it. The bot shows what it would change without editing anything. It never edits sandboxes or anything else outside articles.
+
+== What the bot does ==
+{| class="wikitable"
+! If the article has the old parameter… !! …and the new parameter is !! The bot
+|-
+| filled in || missing || renames the old parameter to the new name
+|-
+| filled in || there but empty || moves the value into the new parameter and deletes the old one
+|-
+| filled in || filled in with the same value || deletes the old one
+|-
+| filled in || filled in with a different value || does nothing and lists the article under ''Needs human review'', unless the row says <code>merge</code> ([[#If both parameters are filled in|see below]])
+|-
+| empty || anything || nothing, because an empty old parameter isn't breaking anything. (If the bot is editing the article anyway, it tidies these up too.)
+|}
+
+The bot also:
+* only edits articles (main namespace)
+* keeps the page's layout, including lined-up <code>=</code> signs
+* won't edit an article again within 30 days of its last edit there, in case someone put the old parameter back on purpose. It lists the article under ''Not edited'' instead.
+* stays off any article with {{tlx|bots|deny{{=}}ParamBot}} or {{tlx|nobots}}
+* ignores a template's rules entirely if it can't read the template's list of accepted parameters. This is reported under ''Rules page problems''.
+
+== If both parameters are filled in ==
+By default, when an article has the old and the new parameter filled in with different values, the bot leaves it for a human. To merge them instead, add a third column headed <code>If both are set</code> and write <code>merge</code> in the rows that should be merged. The bot then adds the old value to the end of the new one, on a new line.
+
+'''Only merge lists''', such as schools or subsidiaries. Never merge things like coordinates, numbers, dates or map names: two of those in one parameter breaks the infobox.
+
+<syntaxhighlight lang="wikitext">
+{| class="wikitable"
+|+ {{tl|Infobox person}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|-
+| {{para|other_name}} || {{para|other_names}} ||
+|}
+</syntaxhighlight>
+
+== A template with an unusual category ==
+The bot watches the category "Pages using ''template'' with unknown parameters", with the template's name starting with a small letter (for example "Pages using infobox settlement with unknown parameters"). If a template uses a different category, put a link to it in the caption. To find a template's category, search its source for <code>with unknown parameters</code>.
+
+<syntaxhighlight lang="wikitext">
+{| class="wikitable"
+|+ {{tl|Infobox foo}} watches [[:Category:Pages using infobox foo with bad parameters]]
+! Old parameter !! New parameter
+|-
+| {{para|oldname}} || {{para|newname}}
+|}
+</syntaxhighlight>
+
+Keep the colon before "Category". Without it, this page would be added to the category.
+
+== The one-line format ==
+Lines in the format of [[WP:AWB/RTP]] also work, and <code>#</code> means a number in them too:
+<syntaxhighlight lang="wikitext">
+* <code>{{AWB rename template parameter|Infobox officeholder|termstart#|term_start#}}</code>
+</syntaxhighlight>
+The bot watches the standard category for these, and they can't say <code>merge</code>.
+
+== Common mistakes ==
+{| class="wikitable"
+! Mistake !! What happens !! Fix
+|-
+| No caption line || The bot ignores the table. If the names are written with <code><nowiki>{{para}}</nowiki></code>, the report says so. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code>{|</code>
+|-
+| Old and new columns swapped || The rules never do anything, because the template accepts the "old" names. The report's ''Notes'' say so. || Swap the columns
+|-
+| Two new names in one row || The row is ignored and reported. || One new name per row
+|-
+| An empty new-name cell || The row is ignored and reported. || Write the new name, or <code>remove</code>
+|-
+| <code>#</code> in only one of the names || The row is ignored and reported. || Use <code>#</code> in both names or in neither
+|-
+| Several names as plain text: <code>a, b</code> || The row is ignored and reported. || Write each name as <code><nowiki>{{para|name}}</nowiki></code>
+|-
+| A note in a cell without <code><nowiki>{{para}}</nowiki></code>, such as <code>imagesize (typo)</code> || The note becomes part of the name. A new name like that is reported; an old one silently never matches. || Write the name as <code><nowiki>{{para|imagesize}}</nowiki></code>
+|-
+| The ''If both are set'' column says something other than <code>merge</code> || Reported, and treated as empty. || Write <code>merge</code> or leave it empty
+|-
+| Wrong capitals, such as <code>Imagesize</code> || Nothing happens. || Copy names exactly from the template
+|-
+| An example table in a discussion on this page, outside <code><nowiki><syntaxhighlight></nowiki></code> || '''The bot obeys it.''' || Put examples inside <code><nowiki><syntaxhighlight lang="wikitext"></nowiki></code>
+|}
+
+== If something goes wrong ==
+* '''One bad edit:''' revert it and say what happened on [[User talk:ParamBot]]. The bot won't edit that article again for 30 days.
+* '''Keep the bot off one article for good:''' add {{tlx|bots|deny{{=}}ParamBot}} to the article.
+* '''The bot is misbehaving:''' change [[User:ParamBot/Run]] to <code>no</code>. The bot checks it before every edit, so it stops straight away, even in the middle of a run.
+* '''The report starts with an ''Errors'' section:''' the last run didn't finish. Tell the bot operator.

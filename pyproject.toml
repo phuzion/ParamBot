@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parambot"
+version = "0.1.0"
+description = "Wikipedia bot that fixes deprecated template parameters restored after a cleanup run"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pywikibot>=9.0",
+    "mwparserfromhell>=0.6.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+parambot = "parambot.cli:main"
+
+[tool.setuptools]
+packages = ["parambot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

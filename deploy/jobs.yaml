@@ -1,0 +1,8 @@
+# Toolforge jobs framework: toolforge jobs load deploy/jobs.yaml
+# Assumes the repo is checked out at ~/parambot with a venv at ~/parambot/venv,
+# and user-config.py / user-password.py in ~/parambot.
+- name: parambot
+  command: cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --live
+  image: python3.13
+  schedule: "17 4 * * *"
+  emails: onfailure

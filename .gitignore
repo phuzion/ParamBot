@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+out/
+user-config.py
+user-password.py
+*.lwp
+apicache*/
+logs/
+throttle.ctrl
+pywikibot.lwp

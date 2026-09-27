@@ -1,0 +1,225 @@
+<!-- An example of [[User:ParamBot/Rules]]. The instructions come from
+     docs/rules-instructions.wiki, posted at [[User:ParamBot/Rules/Instructions]]. -->
+{{User:ParamBot/Rules/Instructions}}
+
+== Infobox settlement ==
+Built from the template's deprecated-parameter block.
+
+{| class="wikitable"
+|+ {{tl|Infobox settlement}}
+! Old parameter !! New parameter
+|-
+| {{para|settlement_type}} || {{para|type}}
+|-
+| {{para|image_skyline}} || {{para|image}}
+|-
+| {{para|imagesize}} || {{para|image_size}}
+|-
+| {{para|image_alt}} || {{para|alt}}
+|-
+| {{para|image_caption}} || {{para|caption}}
+|-
+| {{para|mapsize}} || {{para|map_size}}
+|-
+| {{para|mapsize1}} || {{para|map_size1}}
+|-
+| {{para|pushpin_map_alt}} || {{para|pushpin_alt}}
+|-
+| {{para|pushpin_map_caption}} || {{para|pushpin_caption}}
+|-
+| {{para|pushpin_mapsize}} || {{para|pushpin_map_size}}
+|-
+| {{para|blank#_name}} || {{para|custom_label#_sec1}}
+|-
+| {{para|blank#_info}} || {{para|custom_data#_sec1}}
+|-
+| {{para|blank#_name_sec#}} || {{para|custom_label#_sec#}}
+|-
+| {{para|blank#_info_sec#}} || {{para|custom_data#_sec#}}
+|-
+| {{para|timezone}} || {{para|time_zone}}
+|-
+| {{para|timezone_DST}} || {{para|time_zone_DST}}
+|-
+| {{para|timezone_link}} || {{para|time_zone_link}}
+|-
+| {{para|timezone#}} || {{para|time_zone#}}
+|-
+| {{para|timezone#_DST}} || {{para|time_zone#_DST}}
+|-
+| {{para|timezone#_location}} || {{para|time_zone#_location}}
+|-
+| {{para|pushpin_map_caption_notsmall}} || remove
+|-
+| {{para|pushpin_outside}} || remove
+|-
+| {{para|pushpin_overlay}} || remove
+|-
+| {{para|pushpin_image}} || remove
+|}
+
+== Infobox person ==
+{| class="wikitable"
+|+ {{tl|Infobox person}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|-
+| {{para|alma mater}} || {{para|education}} || merge
+|-
+| {{para|other_name}} || {{para|other_names}} || merge
+|}
+
+== Infobox military installation ==
+{| class="wikitable"
+|+ {{tl|Infobox military installation}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|map_type}} || {{para|pushpin_map}} || merge
+|}
+
+== Infobox organization ==
+{| class="wikitable"
+|+ {{tl|Infobox organization}}
+! Old parameter !! New parameter
+|-
+| {{para|map_dot_label}} || {{para|pushpin_label}}
+|-
+| {{para|coords}} || {{para|coordinates}}
+|-
+| {{para|membership}} || {{para|num_members}}
+|-
+| {{para|subsid}} || {{para|subsidiaries}}
+|-
+| {{para|focus}} || remove
+|-
+| {{para|foci}} || remove
+|-
+| {{para|purpose}} || remove
+|-
+| {{para|map2}} || remove
+|-
+| {{para|map2_alt}} || remove
+|-
+| {{para|map2_caption}} || remove
+|-
+| {{para|map2_size}} || remove
+|-
+| {{para|map2_upright}} || remove
+|}
+
+== Infobox officeholder ==
+The list as it was drawn up, with a caption added.
+
+{| class='wikitable'
+|+ {{tl|Infobox officeholder}}
+! Deprecate/Remove
+! Replace with
+|-
+|{{para|mainwidth}}
+|{{para|main_width}}
+|-
+|{{para|honorific prefix}}
+|{{para|honorific_prefix}}
+|-
+|{{para|honorific-prefix}}
+|{{para|honorific_prefix}}
+|-
+|{{para|honorific suffix}}
+|{{para|honorific_suffix}}
+|-
+|{{para|honorific-suffix}}
+|{{para|honorific_suffix}}
+|-
+|{{para|width}}
+|{{para|image_size}}
+|-
+|{{para|imagesize}}
+|{{para|image_size}}
+|-
+|{{para|termlabel#}}
+|{{para|term_label#}}
+|-
+|{{para|termend#}}
+|{{para|term_end#}}
+|-
+|{{para|termstart#}}
+|{{para|term_start#}}
+|-
+|{{para|birthname}}
+|{{para|birth_name}}
+|-
+|{{para|death_manner}}
+|{{para|death_cause}}
+|-
+|{{para|restingplace}}
+|{{para|resting_place}}
+|-
+|{{para|restingplacecoordinates}}
+|{{para|resting_place_coordinates}}
+|-
+|{{para|otherparty}}
+|{{para|other_party}}
+|-
+|{{para|spouse(s)}}
+|rowspan=2|{{para|spouse}} (will use {{tl|pluralize from text}})
+|-
+|{{para|spouses}}
+|-
+|{{para|image name}}
+|{{para|image}}
+|-
+|{{para|smallimage}}
+|{{para|image}}
+|-
+|{{para|smallimage_alt}}
+|{{para|alt}}
+|-
+|{{para|majorityleader#}}
+|{{para|majority_leader#}}
+|-
+|{{para|minorityleader#}}
+|{{para|minority_leader#}}
+|-
+|{{para|primeminister#}}
+|{{para|prime_minister#}}
+|-
+|{{para|termlabel#}}
+|{{para|term_label#}}
+|-
+|{{para|termend#}}
+|{{para|term_end#}}
+|-
+|{{para|termstart#}}
+|{{para|term_start#}}
+|-
+|{{para|vicegovernor#}}
+|{{para|vice_governor#}}
+|-
+|{{para|vicepresident#}}
+|{{para|vice_president#}}
+|-
+|{{para|vicepremier#}}
+|{{para|vice_premier#}}
+|-
+|{{para|viceprimeminister#}}
+|{{para|vice_prime_minister#}}
+|-
+|{{para|firstminister#}}
+|{{para|first_minister#}}
+|-
+|{{para|parliamentarygroup#}}
+|{{para|parliamentary_group#}}
+|-
+|{{para|runningmate}}
+|{{para|running_mate}}
+|-
+|{{para|appointed#}}
+|{{para|appointer#}}
+|-
+|{{para|jr/sr and state}}
+|'''''remove'''''
+|-
+|{{para|nationality}}
+|'''''remove'''''
+|}
