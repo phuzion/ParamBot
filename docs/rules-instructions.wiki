@@ -13,6 +13,8 @@ When a template stops accepting an old parameter name (for example {{tl|Infobox 
 
 '''Only add renames that already have consensus.''' Usually that means the template's deprecated-parameter check listed them.
 
+'''This page is template-editor protected''', because it decides what the bot edits, and the bot refuses to run if it isn't. If you can't edit it, suggest your rows on the talk page with {{tlx|edit template-protected}}, and a template editor will add them.
+
 == Adding a template ==
 Each template gets a table, with the old parameter names on the left and the new names on the right.
 

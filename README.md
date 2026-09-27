@@ -12,8 +12,8 @@ information, and the article lands in the template's *Pages using
 categories daily and renames the old parameters to the new ones. It never
 reverts anyone's edit and changes nothing else.
 
-**Status:** not deployed. There is no bot account and no bot approval request
-(BRFA) yet, and "ParamBot" is a placeholder name. See [Status](#status).
+**Status:** not deployed. The `ParamBot` account exists, but there is no bot
+approval request (BRFA) yet. See [Status](#status).
 
 ## What it does to a page
 
@@ -33,8 +33,9 @@ replacement.
 ## How a run works
 
 1. **Pre-flight checks** (live runs only). It logs in as the bot account,
-   checks the account has the `bot` right (unless `--trial` is given), and
-   checks that `User:ParamBot/Run` says `yes`.
+   checks the account has the `bot` right (unless `--trial` is given), checks
+   that `User:ParamBot/Run` says `yes`, and checks that all of its pages are
+   set up properly (see [Safeguards](#safeguards)).
 2. **Reads the rules** from `User:ParamBot/Rules`.
 3. **Checks every template the rules name.** It loads each template's
    redirects and its `{{#invoke:Check for unknown parameters|check|...}}`
@@ -73,6 +74,26 @@ replacement.
 - **Layout is kept.** It keeps the page's formatting, including lined-up `=`
   signs. It ignores template calls inside comments, `<nowiki>`, `<pre>` and
   `<syntaxhighlight>`.
+
+**Its own pages**
+
+Before every live run, the bot checks its pages on the wiki and refuses to
+start if any of them is wrong, listing every problem at once. Dry runs and
+`check-rules` report the same problems, under *Setup problems*, without
+stopping.
+
+| Page | Must be |
+|---|---|
+| `User:ParamBot` | an existing wikitext page that uses `{{bot}}` to name the operator, as bot policy requires |
+| `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher**, with at least one rule |
+| `User:ParamBot/Run` | an existing wikitext page, not a redirect, saying `yes` |
+| `User:ParamBot/Report` | an existing wikitext page, not a redirect, that the bot account can edit |
+
+The rules page decides what the bot edits, so anyone able to change it could
+make the bot edit thousands of articles. That's why it must be protected. The
+Run page is left open so any editor can stop the bot. The bot adds a note to
+the report if the Run page is protected, if the rules page's protection is
+due to expire, or if `User:ParamBot/Rules/Instructions` is missing.
 
 **Stopping and failures**
 
@@ -128,10 +149,9 @@ wiki as exactly what the bot will do:
   [WP:AWB/RTP](https://en.wikipedia.org/wiki/Wikipedia:AutoWikiBrowser/Rename_template_parameters),
   also work.
 
-The rules page decides what the bot edits, so it should be protected;
-template-editor protection is the natural level. The safeguards limit what a
-bad rule can do, because the old name has to be one the template rejects and
-the new name one it accepts.
+The bot won't run unless the rules page is template-editor protected or
+higher. Even so, the safeguards limit what a bad rule can do, because the old
+name has to be one the template rejects and the new name one it accepts.
 
 ## Setup
 
@@ -163,7 +183,7 @@ parambot scaffold "Infobox settlement"
 |---|---|
 | `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.wiki` instead of editing. |
 | `run --live` | Edits for real. Needs a bot account and a `user-config.py` (see [Deploying](#deploying-on-toolforge)). |
-| `check-rules` | Checks every rule against its template and category without looking at any articles. Exits 1 if there are problems. |
+| `check-rules` | Checks the bot's own pages, then every rule against its template and category, without looking at any articles. Exits 1 if there are problems. |
 | `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
 
 Options that apply to every command go before the command name, for example
@@ -216,10 +236,19 @@ missing, or the account is wrong.
 3. Copy [`deploy/user-config.example.py`](deploy/user-config.example.py) to
    `~/parambot/user-config.py`, and put the bot password in
    `~/parambot/user-password.py`. Both files are git-ignored.
-4. Create `User:ParamBot/Run` containing `yes`, and a placeholder
-   `User:ParamBot/Report`. *Edit existing pages* doesn't let the bot create
-   pages.
-5. Run `toolforge jobs load deploy/jobs.yaml`.
+4. Set up the bot's pages. *Edit existing pages* doesn't let the bot create
+   pages, so they all have to exist first:
+   - `User:ParamBot`, using `{{bot|YourUsername}}`
+   - `User:ParamBot/Rules`, with the rules, and template-editor protected
+     (ask at
+     [Requests for page protection](https://en.wikipedia.org/wiki/Wikipedia:Requests_for_page_protection))
+   - `User:ParamBot/Rules/Instructions`, a copy of
+     [`docs/rules-instructions.wiki`](docs/rules-instructions.wiki)
+   - `User:ParamBot/Report`, a placeholder
+   - `User:ParamBot/Run`, containing `yes`
+5. Run `parambot check-rules` and fix anything it reports under `SETUP` or
+   `PROBLEM`.
+6. Run `toolforge jobs load deploy/jobs.yaml`.
 
 For a BRFA trial, run by hand first with
 `parambot run --live --trial --max-edits 50`.
@@ -243,13 +272,13 @@ For a BRFA trial, run by hand first with
 
 ## Status
 
-The code is complete and tested against the live wiki in dry runs, but nothing
-has been edited on Wikipedia. Still to decide before filing a BRFA:
+The code is complete and tested against the live wiki in dry runs, but the bot
+hasn't edited Wikipedia. The `ParamBot` account and its pages exist as
+placeholders; `parambot check-rules` lists what they still need. Still to
+decide before filing a BRFA:
 
-- **Account name.** "ParamBot" was unregistered as of September 2026. Every
-  page name follows from `--bot-user`.
-- **Rules page.** Where it lives and who can edit it: the bot's userspace with
-  template-editor protection, or a Wikipedia-space page.
+- **Rules page.** Whether it stays in the bot's userspace or moves to a
+  Wikipedia-space page. Either way it must be template-editor protected.
 - **Timing.** The cooldown length, and whether the bot should run daily.
 - **Scope.** Whether `remove` and `merge` rules are wanted, or only renames.
   Zackmann08 described the bot as changing "only those params it can directly

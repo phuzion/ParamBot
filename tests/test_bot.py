@@ -135,12 +135,65 @@ def test_any_namespace_cli_guards(argv, capsys):
     assert '--any-namespace' in capsys.readouterr().err
 
 
+class WikiPage:
+    """A fake one of the bot's own pages, as _load_pages returns them."""
+
+    def __init__(self, title, exists=True, redirect=False, model='wikitext',
+                 templates=(), protection=None, editable=True):
+        self._title, self._exists, self._redirect = title, exists, redirect
+        self.content_model = model
+        self._templates = [WikiPage(t) for t in templates]
+        self._protection = protection or {}
+        self._editable = editable
+
+    def title(self):
+        return self._title
+
+    def exists(self):
+        return self._exists
+
+    def isRedirectPage(self):
+        return self._redirect
+
+    def templates(self):
+        return self._templates
+
+    def protection(self):
+        return self._protection
+
+    def has_permission(self, action='edit'):
+        return self._editable
+
+
+def set_up_wiki(bot, **changes):
+    """Give the bot a correctly set-up set of pages, with changes: a dict
+    of page title -> WikiPage, or None to make the page missing."""
+    user = f'User:{bot.options.bot_user}'
+    pages = {
+        user: WikiPage(user, templates=['Template:Bot']),
+        bot.options.rules_page: WikiPage(bot.options.rules_page,
+                                         protection={'edit': ('templateeditor', 'infinity')}),
+        bot.options.run_page: WikiPage(bot.options.run_page),
+        bot.options.report_page: WikiPage(bot.options.report_page),
+        f'{bot.options.rules_page}/Instructions': WikiPage(f'{bot.options.rules_page}/Instructions'),
+    }
+    for title, page in changes.items():
+        pages[title] = page if page is not None else WikiPage(title, exists=False)
+    bot.loaded_titles = []
+
+    def load(titles):
+        bot.loaded_titles = list(titles)
+        return {t: pages[t] for t in titles}
+    bot._load_pages = load
+    return bot
+
+
 def live_bot(tmp_path, run_page='yes'):
     bot = ParamBot(site=None, options=Options(bot_user='ExampleBot', live=True,
                                               out_dir=str(tmp_path)))
     bot.run_page_value = run_page
     bot._run_page_text = lambda: bot.run_page_value
-    return bot
+    return set_up_wiki(bot)
 
 
 def test_run_page_checked_before_every_edit(tmp_path):
@@ -196,7 +249,7 @@ def _only_report(tmp_path):
 
 
 def test_crash_still_writes_the_report(tmp_path):
-    bot = ParamBot(site=None, options=Options(out_dir=str(tmp_path)))
+    bot = set_up_wiki(ParamBot(site=None, options=Options(out_dir=str(tmp_path))))
 
     def boom():
         raise ValueError('boom')
@@ -260,6 +313,134 @@ def test_switched_off_before_the_run_does_nothing(tmp_path):
     with pytest.raises(StopRun, match='not running'):
         bot.run()
     assert list(tmp_path.iterdir()) == []
+
+
+RULES = 'User:ExampleBot/Rules'
+REPORT = 'User:ExampleBot/Report'
+RUN = 'User:ExampleBot/Run'
+
+
+def dry_bot(**options):
+    return set_up_wiki(ParamBot(site=None, options=Options(bot_user='ExampleBot', **options)))
+
+
+def test_correctly_set_up_pages_pass():
+    bot = dry_bot()
+    assert bot._check_pages() == []
+    assert bot.report.notes == []
+    assert set(bot.loaded_titles) == {'User:ExampleBot', RULES, RUN, REPORT,
+                                      f'{RULES}/Instructions'}
+
+
+@pytest.mark.parametrize('protection, expected', [
+    ({}, 'is not protected'),
+    ({'edit': ('autoconfirmed', 'infinity')}, 'is semi-protected'),
+    ({'edit': ('extendedconfirmed', 'infinity')}, 'is extended-confirmed protected'),
+    ({'move': ('sysop', 'infinity')}, 'is not protected'),    # move protection isn't enough
+])
+def test_rules_page_must_be_template_editor_protected(protection, expected):
+    bot = set_up_wiki(dry_bot(), **{RULES: WikiPage(RULES, protection=protection)})
+    problems = bot._check_pages()
+    assert len(problems) == 1
+    assert expected in problems[0]
+    assert 'template-editor protected or higher' in problems[0]
+
+
+@pytest.mark.parametrize('level', ['templateeditor', 'sysop'])
+def test_template_editor_protection_or_higher_passes(level):
+    bot = set_up_wiki(dry_bot(), **{RULES: WikiPage(RULES, protection={'edit': (level, 'infinity')})})
+    assert bot._check_pages() == []
+
+
+def test_expiring_protection_is_a_note():
+    bot = set_up_wiki(dry_bot(), **{RULES: WikiPage(
+        RULES, protection={'edit': ('templateeditor', '2026-12-01T00:00:00Z')})})
+    assert bot._check_pages() == []
+    assert 'expires 2026-12-01T00:00:00Z' in bot.report.notes[0]
+
+
+def test_local_rules_file_skips_the_rules_page(tmp_path):
+    bot = dry_bot(rules_file=str(tmp_path / 'rules.wiki'))
+    assert bot._check_pages() == []
+    assert RULES not in bot.loaded_titles
+
+
+@pytest.mark.parametrize('title, page, expected', [
+    ('User:ExampleBot', None, "User:ExampleBot (the bot's user page) does not exist"),
+    ('User:ExampleBot', WikiPage('User:ExampleBot'), "doesn't use {{bot}}"),
+    (RULES, None, f'{RULES} (the rules page) does not exist'),
+    (RULES, WikiPage(RULES, redirect=True, protection={'edit': ('sysop', 'infinity')}),
+     f'{RULES} (the rules page) is a redirect'),
+    (RUN, None, f'{RUN} (the Run page) does not exist'),
+    (REPORT, WikiPage(REPORT, model='json'), 'must be an ordinary wikitext page, not json'),
+    (REPORT, WikiPage(REPORT, protection={'edit': ('sysop', 'infinity')}),
+     'the bot probably cannot edit it'),
+])
+def test_broken_pages_are_problems(title, page, expected):
+    bot = set_up_wiki(dry_bot(), **{title: page})
+    problems = bot._check_pages()
+    assert len(problems) == 1
+    assert expected in problems[0]
+
+
+def test_live_run_checks_the_bot_can_edit_the_report(tmp_path):
+    bot = live_bot(tmp_path)
+    set_up_wiki(bot, **{REPORT: WikiPage(REPORT, editable=False)})
+    assert bot._check_pages() == [
+        'ExampleBot cannot edit User:ExampleBot/Report (the report page). Check its protection.']
+
+
+def test_protected_run_page_and_missing_instructions_are_notes():
+    bot = set_up_wiki(dry_bot(), **{
+        RUN: WikiPage(RUN, protection={'edit': ('sysop', 'infinity')}),
+        f'{RULES}/Instructions': None})
+    assert bot._check_pages() == []
+    notes = '\n'.join(bot.report.notes)
+    assert "most editors can't use it to stop the bot" in notes
+    assert 'Instructions (the instructions for rule writers) does not exist' in notes
+
+
+def test_live_run_refuses_to_start_and_lists_every_problem(tmp_path):
+    bot = live_bot(tmp_path)
+    bot._check_account = lambda: None
+    set_up_wiki(bot, **{RULES: WikiPage(RULES), REPORT: None})
+    ran = []
+    bot._run = lambda: ran.append(True)
+    with pytest.raises(StopRun) as stopped:
+        bot.run()
+    message = str(stopped.value)
+    assert message.startswith("Not running, because of problems with the bot's pages:")
+    assert f'{RULES} (the rules page) is not protected' in message
+    assert f'{REPORT} (the report page) does not exist' in message
+    assert ran == []
+    assert list(tmp_path.iterdir()) == []   # nothing written anywhere
+
+
+def test_dry_run_carries_on_and_reports_setup_problems(tmp_path):
+    bot = set_up_wiki(dry_bot(out_dir=str(tmp_path)), **{RULES: WikiPage(RULES)})
+    bot._run = lambda: None
+    bot.run()
+    report = _only_report(tmp_path)
+    assert '== Setup problems ==' in report
+    assert 'is not protected' in report
+
+
+def test_no_rules_stops_the_run(tmp_path):
+    bot = dry_bot(out_dir=str(tmp_path), rules_file=str(tmp_path / 'rules.wiki'))
+    (tmp_path / 'rules.wiki').write_text('Nothing here yet.', encoding='utf-8')
+    with pytest.raises(StopRun, match='has no rules'):
+        bot.run()
+
+
+def test_check_rules_reports_a_missing_rules_page():
+    bot = set_up_wiki(dry_bot(), **{RULES: None})
+
+    def missing():
+        raise StopRun(f'Rules page {RULES} does not exist')
+    bot._load_config = missing
+    report = bot.check_rules()
+    assert any('(the rules page) does not exist' in s for s in report.setup)
+    assert f'Rules page {RULES} does not exist' in report.setup
 
 
 def test_report_roundtrip():

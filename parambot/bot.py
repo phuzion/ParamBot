@@ -22,6 +22,18 @@ SUMMARY_LIMIT = 450
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
 MAX_FAILURES_IN_A_ROW = 5
 
+# Edit protection levels on the English Wikipedia, and what they're called.
+PROTECTION_NAMES = {
+    'autoconfirmed': 'semi-protected',
+    'extendedconfirmed': 'extended-confirmed protected',
+    'templateeditor': 'template-editor protected',
+    'sysop': 'fully protected',
+}
+# The rules page decides what the bot edits, so only people trusted to edit
+# high-risk templates may change it.
+RULES_PROTECTION = {'templateeditor', 'sysop'}
+INDEFINITE = {'infinity', 'infinite', 'indefinite', 'never'}
+
 
 @dataclass
 class Options:
@@ -75,6 +87,13 @@ class ParamBot:
         if opts.live:
             self._check_account()
             self._check_run_page()
+        setup = self._check_pages()
+        if setup and opts.live:
+            raise StopRun("Not running, because of problems with the bot's pages:\n- "
+                          + '\n- '.join(setup))
+        for problem in setup:
+            log.warning('A live run would refuse to start: %s', problem)
+        self.report.setup.extend(setup)
         try:
             self._run()
         except StopRun as e:
@@ -96,6 +115,8 @@ class ParamBot:
         opts = self.options
         config = self._load_config()
         self.report.problems.extend(config.problems)
+        if not config.rulesets:
+            raise StopRun(f'{self._rules_source()} has no rules, so there is nothing to do')
         rulesets = list(config.rulesets.values())
         if opts.templates:
             wanted = {normalize_template_name(t) for t in opts.templates}
@@ -173,6 +194,9 @@ class ParamBot:
         page = pywikibot.Page(self.site, self.options.run_page)
         return page.text if page.exists() else ''
 
+    def _rules_source(self):
+        return self.options.rules_file or self.options.rules_page
+
     def _load_config(self):
         if self.options.rules_file:
             with open(self.options.rules_file, encoding='utf-8') as f:
@@ -184,10 +208,102 @@ class ParamBot:
             text = page.text
         return parse_config(text)
 
+    def _load_pages(self, titles):
+        """Return {title: Page} for titles, loaded in one batch with their
+        text, protection and templates."""
+        pages = {title: pywikibot.Page(self.site, title) for title in titles}
+        loaded = {p.title(): p for p in self.site.preloadpages(list(pages.values()),
+                                                               templates=True)}
+        return {title: loaded.get(page.title(), page) for title, page in pages.items()}
+
+    def _check_pages(self):
+        """Check the bot's own pages on the wiki.  Return the problems that
+        stop a live run; add anything less serious to the report's notes."""
+        opts = self.options
+        user_page = f'User:{opts.bot_user}'
+        instructions = f'{opts.rules_page}/Instructions'
+        titles = [user_page, opts.run_page, opts.report_page, instructions]
+        if not opts.rules_file:
+            titles.append(opts.rules_page)
+        pages = self._load_pages(titles)
+        problems = []
+
+        def usable(title, what):
+            page = pages[title]
+            if not page.exists():
+                problems.append(f'{title} ({what}) does not exist. Create it.')
+            elif page.isRedirectPage():
+                problems.append(f'{title} ({what}) is a redirect. It must be the page itself.')
+            elif page.content_model != 'wikitext':
+                problems.append(f'{title} ({what}) must be an ordinary wikitext page, not '
+                                f'{page.content_model}.')
+            else:
+                return page
+            return None
+
+        def edit_protection(page):
+            level, expiry = page.protection().get('edit', ('', 'infinity'))
+            return level, expiry
+
+        page = usable(user_page, "the bot's user page")
+        if page is not None and not any(t.title() == 'Template:Bot' for t in page.templates()):
+            problems.append(f"{user_page} doesn't use {{{{bot}}}} to name the bot's operator, "
+                            'which bot policy requires.')
+
+        if not opts.rules_file:
+            page = usable(opts.rules_page, 'the rules page')
+            if page is not None:
+                level, expiry = edit_protection(page)
+                if level not in RULES_PROTECTION:
+                    current = PROTECTION_NAMES.get(level, f'{level} protected') if level \
+                        else 'not protected'
+                    problems.append(
+                        f'{opts.rules_page} (the rules page) is {current}. It decides what the '
+                        'bot edits, so it must be template-editor protected or higher. Ask at '
+                        'Wikipedia:Requests for page protection.')
+                elif expiry not in INDEFINITE:
+                    self.report.notes.append(
+                        f"{opts.rules_page}'s protection expires {expiry}, and the bot won't "
+                        'run after that. Ask for indefinite protection.')
+
+        page = usable(opts.run_page, 'the Run page')
+        if page is not None:
+            level, _ = edit_protection(page)
+            if level in RULES_PROTECTION:
+                self.report.notes.append(
+                    f'{opts.run_page} is {PROTECTION_NAMES[level]}, so most editors can\'t use '
+                    "it to stop the bot. It's meant to be open to everyone.")
+
+        page = usable(opts.report_page, 'the report page')
+        if page is not None:
+            if opts.live:
+                if not page.has_permission('edit'):
+                    problems.append(f'{opts.bot_user} cannot edit {opts.report_page} (the '
+                                    'report page). Check its protection.')
+            else:
+                level, _ = edit_protection(page)
+                if level in RULES_PROTECTION:
+                    problems.append(
+                        f'{opts.report_page} (the report page) is {PROTECTION_NAMES[level]}, so '
+                        'the bot probably cannot edit it. Lower its protection.')
+
+        if not pages[instructions].exists():
+            self.report.notes.append(
+                f'{instructions} (the instructions for rule writers) does not exist. Copy '
+                'docs/rules-instructions.wiki there.')
+        return problems
+
     def check_rules(self):
-        """Load the rules and check every rule set against its template and
-        category, without looking at any articles."""
-        config = self._load_config()
+        """Check the bot's pages, then every rule set against its template
+        and category, without looking at any articles."""
+        self.report.setup.extend(self._check_pages())
+        try:
+            config = self._load_config()
+        except StopRun as e:
+            self.report.setup.append(str(e))
+            return self.report
+        if not config.rulesets:
+            self.report.setup.append(f'{self._rules_source()} has no rules.')
         self.report.problems.extend(config.problems)
         self._prepare_all(config.rulesets.values())
         by_category = {}

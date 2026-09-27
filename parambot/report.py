@@ -27,6 +27,7 @@ class Report:
     problems: list = field(default_factory=list)  # rules-page / rule set problems
     notes: list = field(default_factory=list)     # informational
     errors: list = field(default_factory=list)    # the run went wrong
+    setup: list = field(default_factory=list)     # bot pages that would stop a live run
     edits: int = 0
     pages_checked: int = 0
     categories_polled: int = 0
@@ -47,6 +48,12 @@ class Report:
     def body(self):
         """The report without the stats line, for deciding whether to save."""
         out = []
+        if self.setup:
+            out.append('== Setup problems ==')
+            out.append('A live run refuses to start until these are fixed.')
+            for problem in self.setup:
+                out.append(f'* <nowiki>{problem}</nowiki>')
+            out.append('')
         if self.errors:
             out.append('== Errors ==')
             out.append('This run did not finish. Tell the bot operator.')

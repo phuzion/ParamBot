@@ -115,11 +115,13 @@ def main(argv=None):
 
     if args.command == 'check-rules':
         report = bot.check_rules()
+        for line in report.setup:
+            print('SETUP  ', line)
         for line in report.problems:
             print('PROBLEM', line)
         for line in report.notes:
             print('NOTE   ', line)
-        return 1 if report.problems else 0
+        return 1 if report.problems or report.setup else 0
 
     options.live = args.live
     options.trial = args.trial
