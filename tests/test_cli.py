@@ -1,7 +1,40 @@
+import io
+import sys
+
 import pytest
 
-from parambot.cli import _build_parser, _options, main
+from parambot.cli import _build_parser, _never_crash_printing, _options, main
 from parambot.options import Options
+
+
+class Console(io.TextIOWrapper):
+    """A terminal whose encoding can't show every character."""
+
+    def isatty(self):
+        return True
+
+
+def _swap_output(monkeypatch, stream):
+    monkeypatch.setattr(sys, 'stdout', stream)
+    monkeypatch.setattr(sys, 'stderr', stream)
+
+
+def test_printing_to_a_limited_console_does_not_crash(monkeypatch):
+    buffer = io.BytesIO()
+    _swap_output(monkeypatch, Console(buffer, encoding='cp1252', newline='\n'))
+    _never_crash_printing()
+    print('"a" → "b"')
+    sys.stdout.flush()
+    assert buffer.getvalue() == b'"a" ? "b"\n'
+
+
+def test_redirected_output_is_utf8(monkeypatch):
+    buffer = io.BytesIO()
+    _swap_output(monkeypatch, io.TextIOWrapper(buffer, encoding='cp1252', newline='\n'))
+    _never_crash_printing()
+    print('"a" → "b"')
+    sys.stdout.flush()
+    assert buffer.getvalue() == '"a" → "b"\n'.encode()
 
 
 def test_default_pages_follow_the_bot_user():

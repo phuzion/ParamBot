@@ -10,6 +10,7 @@
 """
 
 import argparse
+import io
 import logging
 import os
 import sys
@@ -23,6 +24,7 @@ from .wiki import Wiki
 
 
 def main(argv: list[str] | None = None) -> int:
+    _never_crash_printing()
     parser = _build_parser()
     args = parser.parse_args(argv)
     if getattr(args, 'any_namespace', False):
@@ -35,6 +37,17 @@ def main(argv: list[str] | None = None) -> int:
     wiki = _connect(args)
     commands = {'run': _run, 'check-rules': _check_rules, 'scaffold': _scaffold}
     return commands[args.command](args, wiki)
+
+
+def _never_crash_printing() -> None:
+    """Messages contain characters such as →, which some consoles can't show
+    (Windows with a non-UTF-8 code page, for one).  Show a replacement there
+    instead of crashing, and write output that goes to a file or a pipe as
+    UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            encoding = stream.encoding if stream.isatty() else 'utf-8'
+            stream.reconfigure(encoding=encoding, errors='replace')
 
 
 def _build_parser() -> argparse.ArgumentParser:
