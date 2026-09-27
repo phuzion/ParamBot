@@ -134,8 +134,14 @@ wiki as exactly what the bot will do:
 |}
 ```
 
-- **Caption:** names the template. A category link in the caption changes the
-  category the bot watches.
+- **Caption:** names the template. The bot watches
+  `Category:Pages using <template, first letter lowercase> with unknown parameters`,
+  unless the caption links to a different category, as some templates need:
+  `|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]`.
+  On every run the bot works out which category each template really uses,
+  by expanding the template's `Check for unknown parameters` call as if for an
+  article. If a table watches the wrong one, the report says which link to
+  add.
 - **Columns:** column 1 holds the old names, column 2 the new name or
   `remove`. An optional column headed *If both are set* can say `merge`;
   other extra columns are notes.

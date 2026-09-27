@@ -13,7 +13,7 @@ from pywikibot import exceptions as pwb_exc
 from .fixer import fix_wikitext
 from .report import Report
 from .rules import parse_config
-from .templatescan import known_params
+from .templatescan import categories_in, known_params
 from .wikitext import normalize_template_name, normalize_title, strip_comments
 
 log = logging.getLogger('parambot')
@@ -33,6 +33,9 @@ PROTECTION_NAMES = {
 # high-risk templates may change it.
 RULES_PROTECTION = {'templateeditor', 'sysop'}
 INDEFINITE = {'infinity', 'infinite', 'indefinite', 'never'}
+# An article title to expand templates against, so {{main other}} and the
+# like behave as they would in an article.
+PROBE_TITLE = 'ParamBot probe'
 
 
 @dataclass
@@ -329,11 +332,14 @@ class ParamBot:
                     # Hidden tracking categories are often never created, so
                     # a missing page with no members may just be empty.
                     sizes[info['title']] = 0
-                    self.report.notes.append(
-                        f'{info["title"]} has no page and no members. If the '
-                        'template uses a different category, put a link to it in the '
-                        'caption of the table for ' + ', '.join(
-                            rs.template for rs in by_category.get(info['title'], [])))
+                    # Say nothing if the category check already explained why.
+                    unexplained = [rs.template for rs in by_category.get(info['title'], [])
+                                   if not rs.wrong_category]
+                    if unexplained:
+                        self.report.notes.append(
+                            f'{info["title"]} has no page and no members. If the template '
+                            'uses a different category, put a link to it in the caption of '
+                            'the table for ' + ', '.join(unexplained))
         return sizes
 
     def _candidates(self, rulesets):
@@ -364,6 +370,44 @@ class ParamBot:
         for rs, page in zip(rulesets, pages):
             self._prepare(rs, loaded.get(page.title(with_ns=False), page))
 
+    def _template_categories(self, rs):
+        """The categories the template puts an article in when it has an
+        unknown parameter, or None if that can't be worked out."""
+        text = rs.known.unknown_text
+        if not text:
+            return []
+        if '{{' in text:
+            # Let MediaWiki expand {{main other}}, {{if empty}}, {{{template_name|}}}
+            # and so on, as if for an article.
+            try:
+                text = self.site.expand_text(text, title=PROBE_TITLE)
+            except Exception as e:
+                log.warning("Couldn't expand Template:%s's unknown-parameter category: %s",
+                            rs.template, e)
+                return None
+        return categories_in(text)
+
+    @staticmethod
+    def _category_problem(rs, found):
+        """A report problem if the rule set watches a category the template
+        doesn't use, else None."""
+        if found is None or rs.category in found:
+            return None
+        if not found:
+            return (f"Template:{rs.template} doesn't put articles with unknown parameters in "
+                    "any category, so the bot can't find them and its rules will never be "
+                    'used.')
+        actual = found[0]
+        if rs.category_explicit:
+            return (f"The {rs.template} table's caption says to watch {rs.category}, but the "
+                    f'template puts articles with unknown parameters in {actual}. Change the '
+                    f'caption\'s category link to [[:{actual}]].')
+        fix = (f"Add [[:{actual}]] to the caption of the {rs.template} table." if rs.has_table
+               else f"One-line rules can't name a category, so put the {rs.template} rules in "
+                    f'a table with [[:{actual}]] in its caption.')
+        return (f'Template:{rs.template} puts articles with unknown parameters in {actual}, '
+                f'not the usual {rs.category}, so its rules will never find anything. {fix}')
+
     def _prepare(self, rs, tpage=None):
         """Look up the template's redirects and parameter whitelist, and
         report rules that can't work."""
@@ -392,6 +436,10 @@ class ParamBot:
                 'its rules are switched off.')
             rs.disabled = True
             return
+        problem = self._category_problem(rs, self._template_categories(rs))
+        if problem:
+            self.report.problems.append(problem)
+            rs.wrong_category = True
         waiting = [name for name in (*rs.renames, *rs.removes) if name in rs.known]
         if waiting:
             self.report.notes.append(

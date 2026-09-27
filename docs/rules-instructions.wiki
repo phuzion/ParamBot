@@ -96,7 +96,7 @@ Check that:
 
 == Checking your rules ==
 After the bot's next daily run, look at [[User:ParamBot/Report]].
-* '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a table with no caption, or a rename to a name the template doesn't accept. Fix those on this page.
+* '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a table with no caption, a rename to a name the template doesn't accept, or a table watching the wrong category. Fix those on this page.
 * A '''Notes''' entry saying the template "still accepts" an old name is normal: nothing is broken yet, so the rule waits. If you meant the row the other way round, swap its two names.
 * '''Needs human review''' lists articles where the old and the new parameter are both filled in with different values. The bot leaves those alone. Fix them by hand.
 
@@ -143,25 +143,27 @@ By default, when an article has the old and the new parameter filled in with dif
 </syntaxhighlight>
 
 == A template with an unusual category ==
-The bot watches the category "Pages using ''template'' with unknown parameters", with the template's name starting with a small letter (for example "Pages using infobox settlement with unknown parameters"). If a template uses a different category, put a link to it in the caption. To find a template's category, search its source for <code>with unknown parameters</code>.
+The bot watches the category "Pages using ''template'' with unknown parameters", with the template's name starting with a small letter (for example "Pages using infobox settlement with unknown parameters"). A few templates use a different one. The anatomy infoboxes, for example, all use "Anatomy infobox template using unknown parameters". For those, put a link to the category in the caption:
 
 <syntaxhighlight lang="wikitext">
 {| class="wikitable"
-|+ {{tl|Infobox foo}} watches [[:Category:Pages using infobox foo with bad parameters]]
+|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]
 ! Old parameter !! New parameter
 |-
-| {{para|oldname}} || {{para|newname}}
+| {{para|old_name}} || {{para|new_name}}
 |}
 </syntaxhighlight>
 
 Keep the colon before "Category". Without it, this page would be added to the category.
+
+'''You don't need to look the category up yourself.''' On every run the bot checks which category each template really uses. If a table watches the wrong one, the report's ''Rules page problems'' says so and gives the exact link to put in the caption.
 
 == The one-line format ==
 Lines in the format of [[WP:AWB/RTP]] also work, and <code>#</code> means a number in them too:
 <syntaxhighlight lang="wikitext">
 * <code>{{AWB rename template parameter|Infobox officeholder|termstart#|term_start#}}</code>
 </syntaxhighlight>
-The bot watches the standard category for these, and they can't say <code>merge</code>.
+These lines can't say <code>merge</code> or name a category. The bot watches the standard category for them, unless a table for the same template has a category link in its caption. For a template with an [[#A template with an unusual category|unusual category]], use a table.
 
 == Common mistakes ==
 {| class="wikitable"
@@ -170,6 +172,8 @@ The bot watches the standard category for these, and they can't say <code>merge<
 | No caption line || The bot ignores the table. If the names are written with <code><nowiki>{{para}}</nowiki></code>, the report says so. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code>{|</code>
 |-
 | Old and new columns swapped || The rules never do anything, because the template accepts the "old" names. The report's ''Notes'' say so. || Swap the columns
+|-
+| A template with an unusual category, and no category link in the caption || The rules never find anything. The report says so and gives the link. || Add that link to the caption
 |-
 | Two new names in one row || The row is ignored and reported. || One new name per row
 |-

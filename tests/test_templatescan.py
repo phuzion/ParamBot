@@ -1,7 +1,7 @@
 import pytest
 
 from parambot.rules import parse_config
-from parambot.templatescan import _pattern_to_hash, known_params, scaffold_table
+from parambot.templatescan import _pattern_to_hash, categories_in, known_params, scaffold_table
 
 TEMPLATE = '''{{Infobox
 | above = {{{name|}}}
@@ -28,6 +28,21 @@ def test_known_params():
     assert 'imagesize' not in known
     assert 'check' not in known            # the module function name
     assert 'unknown' not in known
+
+
+def test_unknown_category_text():
+    text = known_params(TEMPLATE).unknown_text
+    assert text == ('{{main other|[[Category:Pages using infobox example with unknown '
+                    'parameters|_VALUE_{{PAGENAME}}]]}}')
+    assert categories_in(text) == ['Category:Pages using infobox example with unknown parameters']
+
+
+def test_categories_in():
+    assert categories_in('[[Category:Anatomy infobox template using unknown parameters|_VALUE_X]]'
+                         ' [[ category : anatomy infobox template using unknown parameters ]]'
+                         ' [[:Category:Other]] [[Not a category]]') == [
+        'Category:Anatomy infobox template using unknown parameters', 'Category:Other']
+    assert categories_in('Found _VALUE_, ') == []
 
 
 def test_known_params_absent():

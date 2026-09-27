@@ -443,6 +443,93 @@ def test_check_rules_reports_a_missing_rules_page():
     assert f'Rules page {RULES} does not exist' in report.setup
 
 
+ANATOMY = 'Category:Anatomy infobox template using unknown parameters'
+
+
+def _bone(caption_category=''):
+    link = f' watches [[:{caption_category}]]' if caption_category else ''
+    return parse_config('{|\n|+ {{tl|Infobox bone}}' + link + '\n| {{para|a}} || {{para|b}}\n|}'
+                        ).rulesets['Infobox bone']
+
+
+def test_category_matches():
+    assert ParamBot._category_problem(_bone(ANATOMY), [ANATOMY]) is None
+    assert ParamBot._category_problem(_bone(), [_bone().category]) is None
+
+
+def test_category_differs_from_the_default():
+    problem = ParamBot._category_problem(_bone(), [ANATOMY])
+    assert 'not the usual Category:Pages using infobox bone with unknown parameters' in problem
+    assert f'Add [[:{ANATOMY}]] to the caption of the Infobox bone table' in problem
+
+
+def test_category_differs_from_the_caption():
+    problem = ParamBot._category_problem(_bone('Category:Typo category'), [ANATOMY])
+    assert "caption says to watch Category:Typo category" in problem
+    assert f"Change the caption's category link to [[:{ANATOMY}]]" in problem
+
+
+def test_one_line_rules_are_told_to_use_a_table():
+    rs = parse_config('* {{AWB rename template parameter|Infobox bone|a|b}}').rulesets['Infobox bone']
+    problem = ParamBot._category_problem(rs, [ANATOMY])
+    assert "One-line rules can't name a category" in problem
+    assert f'a table with [[:{ANATOMY}]] in its caption' in problem
+
+
+def test_template_without_a_category():
+    assert "doesn't put articles with unknown parameters in any category" in \
+        ParamBot._category_problem(_bone(), [])
+
+
+def test_category_unknown_is_not_a_problem():
+    assert ParamBot._category_problem(_bone(), None) is None
+
+
+class ExpandingSite:
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.calls = result, error, []
+
+    def expand_text(self, text, title=None):
+        self.calls.append((text, title))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def _with_unknown_text(rs, text):
+    from parambot.templatescan import KnownParams
+    rs.known = KnownParams(unknown_text=text)
+    return rs
+
+
+def test_template_categories_are_expanded_as_for_an_article():
+    site = ExpandingSite(f'[[{ANATOMY}|_VALUE_ParamBot probe]]')
+    bot = ParamBot(site=site, options=Options())
+    rs = _with_unknown_text(_bone(), f'{{{{main other|[[{ANATOMY}|_VALUE_{{{{PAGENAME}}}}]]}}}}')
+    assert bot._template_categories(rs) == [ANATOMY]
+    assert site.calls[0][1] == 'ParamBot probe'
+
+
+def test_plain_category_text_needs_no_expansion():
+    site = ExpandingSite()
+    bot = ParamBot(site=site, options=Options())
+    assert bot._template_categories(_with_unknown_text(_bone(), f'[[{ANATOMY}]]')) == [ANATOMY]
+    assert site.calls == []
+
+
+def test_expansion_failure_skips_the_check():
+    bot = ParamBot(site=ExpandingSite(error=ConnectionError('down')), options=Options())
+    assert bot._template_categories(_with_unknown_text(_bone(), '{{main other|x}}')) is None
+
+
+def test_explicit_category_overrides_a_default_from_another_table():
+    config = parse_config('{|\n|+ {{tl|Infobox bone}}\n| {{para|a}} || {{para|b}}\n|}\n'
+                          '{|\n|+ {{tl|Infobox bone}} [[:' + ANATOMY + ']]\n'
+                          '| {{para|c}} || {{para|d}}\n|}')
+    assert config.problems == []
+    assert config.rulesets['Infobox bone'].category == ANATOMY
+
+
 def test_report_roundtrip():
     report = Report()
     report.issue('Foo', Issue('Infobox person', 'alma_mater', 'education', 'both set'))

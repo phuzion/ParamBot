@@ -93,10 +93,13 @@ class RuleSet:
     renames: dict = field(default_factory=dict)   # old name -> Rule
     removes: dict = field(default_factory=dict)   # name -> Rule
     patterns: list = field(default_factory=list)  # Rules for names with "#", in order
+    category_explicit: bool = False               # a caption named the category
+    has_table: bool = False                       # not only one-line rules
     # Filled in by the bot at run time.
     names: set = field(default_factory=set)       # template name + redirects
     known: object = None                          # KnownParams or None
     disabled: bool = False                        # e.g. the template is missing
+    wrong_category: bool = False                  # the template uses another category
 
     def __post_init__(self):
         self.names.add(self.template)
@@ -168,16 +171,18 @@ def _ruleset_for(config, template, category=None):
     template = normalize_template_name(template)
     rs = config.rulesets.get(template)
     if rs is None:
-        rs = RuleSet(template, normalize_category(category or default_unknown_category(template)))
+        rs = RuleSet(template, normalize_category(category or default_unknown_category(template)),
+                     category_explicit=bool(category))
         config.rulesets[template] = rs
     elif category:
         category = normalize_category(category)
-        if category != rs.category:
+        if rs.category_explicit and category != rs.category:
             config.problems.append(
                 f'{template}: two tables give different categories to watch '
                 f'("{rs.category}" and "{category}"). Using "{category}"; '
                 'delete the wrong one.')
-            rs.category = category
+        rs.category = category
+        rs.category_explicit = True
     return rs
 
 
@@ -334,6 +339,7 @@ def _parse_table(table, config):
     if problem:
         problems.append(f'{template}: {problem}')
     rs = _ruleset_for(config, template, category)
+    rs.has_table = True
 
     conflict_col = None
     for cells, row in grid:

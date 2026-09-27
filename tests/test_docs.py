@@ -79,8 +79,9 @@ def test_merge_example():
 
 
 def test_category_example():
-    rs = parse_config(_examples_in('A template with an unusual category')[0]).rulesets['Infobox foo']
-    assert rs.category == 'Category:Pages using infobox foo with bad parameters'
+    rs = parse_config(_examples_in('A template with an unusual category')[0]).rulesets['Infobox bone']
+    assert rs.category == 'Category:Anatomy infobox template using unknown parameters'
+    assert rs.category_explicit
 
 
 def test_one_line_example():

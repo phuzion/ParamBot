@@ -15,9 +15,9 @@ import re
 import mwparserfromhell
 
 from .luapattern import LuaPattern, LuaPatternError
-from .wikitext import normalize_template_name, param_name, strip_comments
+from .wikitext import normalize_category, normalize_template_name, param_name, strip_comments
 
-__all__ = ['KnownParams', 'known_params', 'scaffold_table']
+__all__ = ['KnownParams', 'known_params', 'categories_in', 'scaffold_table']
 
 # Copied from Module:Check for unknown parameters, which adds these names
 # when the call has |mapframe_args=y or |pushpin_map_args=y.
@@ -49,11 +49,15 @@ _DEPRECATED_MODULE = 'Check for deprecated parameters'
 
 
 class KnownParams:
-    """The parameters a template accepts, per its unknown-parameter check."""
+    """The parameters a template accepts, per its unknown-parameter check.
 
-    def __init__(self, names=(), patterns=()):
+    ``unknown_text`` is the check's raw ``unknown=`` wikitext, which holds
+    the category link for pages with unknown parameters."""
+
+    def __init__(self, names=(), patterns=(), unknown_text=None):
         self.names = set(names)
         self.patterns = list(patterns)
+        self.unknown_text = unknown_text
 
     def __repr__(self):
         return f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns)'
@@ -86,8 +90,11 @@ def known_params(source):
     found = False
     names = set()
     patterns = []
+    unknown_text = None
     for tpl in _invokes(code, _UNKNOWN_MODULE):
         found = True
+        if unknown_text is None and tpl.has('unknown'):
+            unknown_text = str(tpl.get('unknown').value).strip() or None
         for param in tpl.params[1:]:
             value = strip_comments(param.value).strip()
             if not param.showkey:
@@ -105,7 +112,20 @@ def known_params(source):
                 names |= MAPFRAME_PARAMS
             elif key == 'pushpin_map_args' and value:
                 names |= PUSHPIN_MAP_PARAMS
-    return KnownParams(names, patterns) if found else None
+    return KnownParams(names, patterns, unknown_text) if found else None
+
+
+_CATEGORY_LINK_RE = re.compile(r'\[\[\s*:?\s*category\s*:\s*([^|\]]+)', re.IGNORECASE)
+
+
+def categories_in(wikitext):
+    """The categories linked in (expanded) wikitext, normalized, in order."""
+    out = []
+    for name in _CATEGORY_LINK_RE.findall(wikitext):
+        category = normalize_category(name)
+        if category not in out:
+            out.append(category)
+    return out
 
 
 _NUMBER_GROUP_RE = re.compile(r'\(%d[*+?]?\)')
