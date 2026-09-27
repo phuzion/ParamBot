@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "ruff", "mypy"]
 
 [project.scripts]
 parambot = "parambot.cli:main"
@@ -24,3 +24,40 @@ packages = ["parambot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "B",        # bugbear
+    "I",        # import order
+    "UP",       # modern syntax for the supported Python versions
+    "SIM",      # simplifications
+    "C90",      # complexity
+]
+ignore = [
+    "SIM905",   # word lists written as '''...'''.split() read better than long list literals
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Pywikibot provides `usernames` when it runs a user-config.py.
+"deploy/user-config.example.py" = ["F821"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.mypy]
+files = ["parambot"]
+python_version = "3.11"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["pywikibot", "pywikibot.*"]   # ships no type information
+ignore_missing_imports = true
