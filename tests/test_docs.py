@@ -11,7 +11,8 @@ import pytest
 
 from parambot.rules import AWB_TEMPLATE, REMOVE, parse_config
 
-DOC = (Path(__file__).parent.parent / 'docs' / 'rules-instructions.mediawiki').read_text(encoding='utf-8')
+DOC_PATH = Path(__file__).parent.parent / 'docs' / 'rules-instructions.mediawiki'
+DOC = DOC_PATH.read_text(encoding='utf-8')
 EXAMPLE_RE = re.compile(r'<syntaxhighlight lang="wikitext">\n(.*?)</syntaxhighlight>', re.S)
 EXAMPLES = EXAMPLE_RE.findall(DOC)
 
@@ -73,13 +74,15 @@ def test_writing_rows_example_and_number_table():
 
 
 def test_merge_example():
-    rs = parse_config(_examples_in('If both parameters are filled in')[0]).rulesets['Infobox person']
+    example = _examples_in('If both parameters are filled in')[0]
+    rs = parse_config(example).rulesets['Infobox person']
     assert rs.renames['alma_mater'].conflict == 'merge'
     assert rs.renames['other_name'].conflict == 'skip'
 
 
 def test_category_example():
-    rs = parse_config(_examples_in('A template with an unusual category')[0]).rulesets['Infobox bone']
+    example = _examples_in('A template with an unusual category')[0]
+    rs = parse_config(example).rulesets['Infobox bone']
     assert rs.category == 'Category:Anatomy infobox template using unknown parameters'
     assert rs.category_explicit
 

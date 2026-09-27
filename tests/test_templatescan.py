@@ -1,22 +1,29 @@
 import pytest
 
 from parambot.rules import parse_config
-from parambot.templatescan import _pattern_to_hash, categories_in, known_params, scaffold_table
+from parambot.templatescan import _to_number_form, categories_in, known_params, scaffold_table
 
+UNKNOWN = ('{{main other|[[Category:Pages using infobox example with unknown parameters'
+           '|_VALUE_{{PAGENAME}}]]}}')
+DEPRECATED = ('{{main other|[[Category:Pages using infobox example with deprecated parameters'
+              '|_VALUE_]]}}')
 TEMPLATE = '''{{Infobox
 | above = {{{name|}}}
 }}<!-- Check for unknowns
--->{{#invoke:Check for unknown parameters|check|unknown={{main other|[[Category:Pages using infobox example with unknown parameters|_VALUE_{{PAGENAME}}]]}}|preview = Page using [[Template:Infobox example]] with unknown parameter "_VALUE_"|ignoreblank=y|mapframe_args=y
+-->{{#invoke:Check for unknown parameters|check|unknown=UNKNOWN
+|preview = Page using [[Template:Infobox example]] with unknown parameter "_VALUE_"
+|ignoreblank=y|mapframe_args=y
 | alt | image | image_size | caption
 | name | type <!-- new
       parameters -->
 | regexp1 = custom_label[1-9]_sec[1-9]
 }}{{#invoke:Check for deprecated parameters|check
-| _category = {{main other|[[Category:Pages using infobox example with deprecated parameters|_VALUE_]]}}
+| _category = DEPRECATED
 | _remove = old_thing; other_thing
 | imagesize = image_size
 | _regexp1 = blank(%d*)_name = custom_label%1_sec1
-}}<noinclude>{{documentation}}</noinclude>'''
+}}<noinclude>{{documentation}}</noinclude>'''.replace('UNKNOWN', UNKNOWN).replace(
+    'DEPRECATED', DEPRECATED)
 
 
 def test_known_params():
@@ -79,7 +86,7 @@ def test_scaffold_roundtrip():
     ('foo', 'bar', None),                                 # no number at all
 ])
 def test_pattern_conversion(pattern, replacement, expected):
-    assert _pattern_to_hash(pattern, replacement) == expected
+    assert _to_number_form(pattern, replacement) == expected
 
 
 def test_scaffold_reports_unconvertible_patterns():

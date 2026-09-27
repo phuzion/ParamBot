@@ -1,4 +1,4 @@
-"""Applying rule sets to a page's wikitext.
+"""Applying a template's rules to a page's wikitext.
 
 Only parameter names are changed; values are moved only when the old
 parameter has to be folded into an existing new one.  Cases the bot cannot
@@ -6,35 +6,67 @@ settle on its own are returned as issues for the report page.
 """
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Optional
 
 import mwparserfromhell
+from mwparserfromhell.nodes import Template
+from mwparserfromhell.nodes.extras import Parameter
 
-from .rules import REMOVE
+from . import messages as msg
+from .rules import MERGE, REMOVE, Rule, RuleSet
+from .templatescan import KnownParams
 from .wikitext import is_blank, normalize_template_name, param_name, same_value, split_ws
 
-__all__ = ['Change', 'Issue', 'FixResult', 'fix_wikitext']
+__all__ = ['TemplateRules', 'Change', 'Issue', 'FixResult', 'fix_wikitext']
 
+# What happened to an old parameter.
 RENAMED = 'renamed'
-FILLED = 'filled'            # new parameter was empty; old value moved into it
-DUPLICATE = 'duplicate'      # both set to the same value; old one removed
-MERGED = 'merged'            # both set; old value appended to new one
-REMOVED = 'removed'          # "remove" rule
-EMPTY = 'empty'              # old parameter was empty; removed
+FILLED = 'filled'            # the new parameter was empty; the old value was moved into it
+DUPLICATE = 'duplicate'      # both were set to the same value; the old one was removed
+MERGED = 'merged'            # both were set; the old value was appended to the new one
+REMOVED = 'removed'          # a "remove" rule
+EMPTY = 'empty'              # the old parameter was empty and was removed
+
+
+@dataclass(frozen=True)
+class TemplateRules:
+    """A template's rules, ready to apply."""
+
+    rules: RuleSet
+    names: frozenset[str]              # the template's name and its redirects
+    known: KnownParams | None = None   # the parameters it accepts; None if not checked
+
+    @classmethod
+    def unchecked(cls, rules: RuleSet) -> 'TemplateRules':
+        """The rules on their own, for use without the wiki: no redirects, and
+        no check against the template's accepted parameters."""
+        return cls(rules, frozenset({rules.template}))
+
+    @property
+    def template(self) -> str:
+        return self.rules.template
+
+    def still_accepts(self, name: str) -> bool:
+        """True if the template is known to accept name."""
+        return self.known is not None and name in self.known
+
+    def rejects(self, name: str) -> bool:
+        """True if the template is known not to accept name."""
+        return self.known is not None and name not in self.known
 
 
 @dataclass
 class Change:
     template: str
     old: str
-    new: Optional[str]
+    new: str | None
     action: str
     # False when the edit would not change what the page displays or which
     # tracking categories it is in (the old parameter was empty).
     substantive: bool
 
-    def describe(self):
+    def describe(self) -> str:
         if self.action in (RENAMED, FILLED):
             return f'{self.old} → {self.new}'
         if self.action == DUPLICATE:
@@ -50,7 +82,7 @@ class Change:
 class Issue:
     template: str
     param: str
-    target: Optional[str]
+    target: str | None
     reason: str
 
 
@@ -58,106 +90,114 @@ class Issue:
 class FixResult:
     original: str
     text: str
-    changes: list = field(default_factory=list)
-    issues: list = field(default_factory=list)
+    changes: list[Change] = field(default_factory=list)
+    issues: list[Issue] = field(default_factory=list)
 
     @property
-    def changed(self):
+    def changed(self) -> bool:
         return self.text != self.original
 
     @property
-    def substantive(self):
+    def substantive(self) -> bool:
         return self.changed and any(c.substantive for c in self.changes)
 
-    def templates(self):
+    def templates(self) -> list[str]:
         return sorted({c.template for c in self.changes})
 
 
-def fix_wikitext(text, rulesets):
-    """Apply rule sets to wikitext and return a FixResult."""
-    index = {}
-    for rs in rulesets:
-        for name in rs.names:
-            index[name] = rs
+def fix_wikitext(text: str, targets: Iterable[TemplateRules]) -> FixResult:
+    """Apply each template's rules to its calls in wikitext."""
+    by_name = {name: target for target in targets for name in target.names}
     result = FixResult(original=text, text=text)
     code = mwparserfromhell.parse(text)
-    for tpl in code.filter_templates(recursive=True):
-        rs = index.get(normalize_template_name(tpl.name))
-        if rs is not None:
-            _fix_template(tpl, rs, result)
+    for call in code.filter_templates(recursive=True):
+        target = by_name.get(normalize_template_name(call.name))
+        if target is not None:
+            _CallFixer(call, target, result).fix()
     result.text = str(code)
     return result
 
 
-def _fix_template(tpl, rs, result):
-    known = rs.known
+class _CallFixer:
+    """Applies one template's rules to one call of it."""
 
-    def issue(param, target, reason):
-        result.issues.append(Issue(rs.template, param, target, reason))
+    def __init__(self, call: Template, target: TemplateRules, result: FixResult) -> None:
+        self.call = call
+        self.target = target
+        self.result = result
+        # Name widths whose = signs line up because names of different
+        # lengths were padded to reach them.
+        padded: dict[int, set[int]] = defaultdict(set)
+        for param in call.params:
+            if param.showkey and '\n' not in str(param.name):
+                padded[len(str(param.name))].add(len(str(param.name).strip()))
+        self.aligned_widths = {width for width, lengths in padded.items() if len(lengths) > 1}
 
-    def change(old, new, action, substantive):
-        result.changes.append(Change(rs.template, old, new, action, substantive))
+    def fix(self) -> None:
+        for param in list(self.call.params):
+            if param.showkey and any(p is param for p in self.call.params):
+                self._fix_param(param)
 
-    # The = signs are lined up at a column if names of different lengths
-    # were padded to reach it.
-    padded = defaultdict(set)
-    for q in tpl.params:
-        if q.showkey and '\n' not in str(q.name):
-            padded[len(str(q.name))].add(len(str(q.name).strip()))
-
-    for param in list(tpl.params):
-        if not param.showkey or not any(p is param for p in tpl.params):
-            continue
+    def _fix_param(self, param: Parameter) -> None:
         name = param_name(param)
-        match = rs.lookup(name)
-        if match is None:
-            continue
-        if known is not None and name in known:
-            # Still accepted by the template: not broken, so not ours to fix.
-            continue
+        match = self.target.rules.lookup(name)
+        if match is None or self.target.still_accepts(name):
+            return  # no rule, or the template still accepts it, so nothing is broken
         if '<!--' in str(param.name):
-            issue(name, match.target, 'parameter name contains a comment')
-            continue
+            self._issue(name, match.target, msg.name_has_comment())
+        elif match.rule.kind == REMOVE:
+            self._remove(param, name)
+        else:
+            assert match.target is not None
+            self._rename(param, name, match.target, match.rule)
+
+    def _remove(self, param: Parameter, name: str) -> None:
         blank = is_blank(param.value)
+        self.call.remove(param)
+        self._change(name, None, EMPTY if blank else REMOVED, not blank)
 
-        if match.rule.kind == REMOVE:
-            tpl.remove(param)
-            change(name, None, EMPTY if blank else REMOVED, not blank)
-            continue
-
-        target = match.target
-        if known is not None and target not in known:
-            issue(name, target, f'the template does not accept "{target}"; check the rule')
-            continue
-
-        existing = [q for q in tpl.params
-                    if q is not param and q.showkey and param_name(q) == target]
+    def _rename(self, param: Parameter, name: str, new: str, rule: Rule) -> None:
+        if self.target.rejects(new):
+            self._issue(name, new, msg.target_rejected(new))
+            return
+        existing = [p for p in self.call.params
+                    if p is not param and p.showkey and param_name(p) == new]
         if not existing:
             raw = str(param.name)
-            param.name = _renamed(raw, target, len(padded[len(raw)]) > 1)
-            change(name, target, RENAMED, not blank)
-            continue
+            param.name = _renamed(raw, new, len(raw) in self.aligned_widths)
+            self._change(name, new, RENAMED, not is_blank(param.value))
+        else:
+            # MediaWiki uses the last of duplicated parameters.
+            self._fold_into(param, existing[-1], name, new, rule)
 
-        dest = existing[-1]  # MediaWiki uses the last of duplicated parameters
-        if blank:
-            tpl.remove(param)
-            change(name, target, EMPTY, False)
+    def _fold_into(self, param: Parameter, dest: Parameter, name: str, new: str,
+                   rule: Rule) -> None:
+        """The new parameter is already there: fold the old one into it."""
+        if is_blank(param.value):
+            self.call.remove(param)
+            self._change(name, new, EMPTY, False)
         elif is_blank(dest.value):
             dest.value = _filled(str(dest.value), str(param.value))
-            tpl.remove(param)
-            change(name, target, FILLED, True)
+            self.call.remove(param)
+            self._change(name, new, FILLED, True)
         elif same_value(param.value, dest.value):
-            tpl.remove(param)
-            change(name, target, DUPLICATE, True)
-        elif match.rule.conflict == 'merge':
-            dest.value = _merged(str(dest.value), str(param.value), match.rule.separator)
-            tpl.remove(param)
-            change(name, target, MERGED, True)
+            self.call.remove(param)
+            self._change(name, new, DUPLICATE, True)
+        elif rule.conflict == MERGE:
+            dest.value = _merged(str(dest.value), str(param.value), rule.separator)
+            self.call.remove(param)
+            self._change(name, new, MERGED, True)
         else:
-            issue(name, target, f'"{name}" and "{target}" are both set, to different values')
+            self._issue(name, new, msg.both_set(name, new))
+
+    def _change(self, old: str, new: str | None, action: str, substantive: bool) -> None:
+        self.result.changes.append(Change(self.target.template, old, new, action, substantive))
+
+    def _issue(self, param: str, target: str | None, reason: str) -> None:
+        self.result.issues.append(Issue(self.target.template, param, target, reason))
 
 
-def _renamed(raw, new, aligned=False):
+def _renamed(raw: str, new: str, aligned: bool = False) -> str:
     """Rename a raw parameter name, keeping its whitespace and, where the
     names were padded to line up the = signs, the alignment."""
     lead, core, trail = split_ws(raw)
@@ -166,7 +206,7 @@ def _renamed(raw, new, aligned=False):
     return lead + new + trail
 
 
-def _filled(dest, src):
+def _filled(dest: str, src: str) -> str:
     """Put src's content into the empty value dest, keeping dest's layout
     and any comment it holds."""
     d_lead, d_core, d_trail = split_ws(dest)
@@ -176,7 +216,7 @@ def _filled(dest, src):
     return lead + core + d_trail
 
 
-def _merged(dest, src, separator):
+def _merged(dest: str, src: str, separator: str) -> str:
     d_lead, d_core, d_trail = split_ws(dest)
     s_core = split_ws(src)[1]
     return d_lead + d_core + separator + s_core + d_trail

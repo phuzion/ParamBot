@@ -2,11 +2,11 @@
 Module:Check for unknown parameters, translated into Python regexes.
 
 Templates on the English Wikipedia describe parameter families with Lua
-patterns (``blank(%d*)_name = custom_label%1_sec1``).  Rules copied from a
-template are kept in that syntax so they can be pasted verbatim, and are
-translated here.  Only the parts of the Lua pattern language that make sense
-for parameter names are supported; ``%b``, ``%f`` and position captures raise
-``LuaPatternError``.
+patterns (``blank(%d*)_name = custom_label%1_sec1``).  The bot reads them from
+templates' unknown-parameter checks, to know which names a template accepts,
+and turns rules' "#" names into them.  Only the parts of the Lua pattern
+language that make sense for parameter names are supported; ``%b``, ``%f``
+and position captures raise ``LuaPatternError``.
 
 Character classes follow mw.ustring, where %a, %d, %s and %w are
 Unicode-aware.  %l, %u and everything inside ``[...]`` sets use the ASCII
@@ -58,31 +58,31 @@ _SET_CLASSES = {
 _QUANTIFIERS = {'*': '*', '+': '+', '?': '?', '-': '*?'}
 
 
-def _escape_in_set(ch):
+def _escape_in_set(ch: str) -> str:
     return '\\' + ch if ch in '\\]^-[' else ch
 
 
 class LuaPattern:
     """A Lua pattern that must match a whole parameter name."""
 
-    def __init__(self, source):
+    def __init__(self, source: str) -> None:
         self.source = source
         self.groups = 0
         self.regex = re.compile(self._translate(source), re.DOTALL)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'LuaPattern({self.source!r})'
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, LuaPattern) and other.source == self.source
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.source)
 
-    def fullmatch(self, name):
+    def fullmatch(self, name: str) -> re.Match[str] | None:
         return self.regex.fullmatch(name)
 
-    def check_replacement(self, replacement):
+    def check_replacement(self, replacement: str) -> None:
         """Raise LuaPatternError if replacement is malformed or refers to a
         capture the pattern does not have."""
         for m in re.finditer(r'%(.?)', replacement.replace('%%', '')):
@@ -93,13 +93,13 @@ class LuaPattern:
                 raise LuaPatternError(
                     f'invalid capture index %{ref} in replacement {replacement!r}')
 
-    def sub(self, name, replacement):
+    def sub(self, name: str, replacement: str) -> str | None:
         """Return ``replacement`` expanded against ``name``, or None if the
         pattern does not match the whole name."""
         m = self.fullmatch(name)
         if m is None:
             return None
-        out = []
+        out: list[str] = []
         i = 0
         while i < len(replacement):
             ch = replacement[i]
@@ -126,16 +126,12 @@ class LuaPattern:
             i += 2
         return ''.join(out)
 
-    def _translate(self, src):
+    def _translate(self, src: str) -> str:
+        """The Python regex for a Lua pattern.  Counts its captures."""
+        i = 1 if src.startswith('^') else 0
+        end = len(src) - 1 if src.endswith('$') and not src.endswith('%$') else len(src)
         out = []
-        i = 0
-        n = len(src)
         depth = 0
-        if src.startswith('^'):
-            i = 1
-        end = n
-        if src.endswith('$') and not src.endswith('%$'):
-            end = n - 1
         while i < end:
             ch = src[i]
             if ch == '(':
@@ -145,45 +141,44 @@ class LuaPattern:
                 depth += 1
                 self.groups += 1
                 i += 1
-                continue
-            if ch == ')':
+            elif ch == ')':
                 if depth == 0:
                     raise LuaPatternError(f'unbalanced ) in {src!r}')
                 out.append(')')
                 depth -= 1
                 i += 1
-                continue
-            # A single-character item, which may take a quantifier.
-            if ch == '%':
-                if i + 1 >= end:
-                    raise LuaPatternError(f'pattern ends with % in {src!r}')
-                nxt = src[i + 1]
-                if nxt in 'bf':
-                    raise LuaPatternError(f'%{nxt} is not supported: {src!r}')
-                if nxt.isdigit():
-                    out.append(f'(?:\\{nxt})')
-                    i += 2
-                    continue
-                item = _CLASSES.get(nxt) or re.escape(nxt)
-                i += 2
-            elif ch == '[':
-                item, i = self._translate_set(src, i, end)
-            elif ch == '.':
-                item = '.'
-                i += 1
             else:
-                item = re.escape(ch)
-                i += 1
-            if i < end and src[i] in _QUANTIFIERS:
-                item += _QUANTIFIERS[src[i]]
-                i += 1
-            out.append(item)
+                item, i = self._translate_item(src, i, end)
+                out.append(item)
         if depth:
             raise LuaPatternError(f'unfinished capture in {src!r}')
         return ''.join(out)
 
+    def _translate_item(self, src: str, i: int, end: int) -> tuple[str, int]:
+        """Translate the single-character item at src[i], and any quantifier
+        after it; return (regex, next index)."""
+        ch = src[i]
+        if ch == '%':
+            if i + 1 >= end:
+                raise LuaPatternError(f'pattern ends with % in {src!r}')
+            nxt = src[i + 1]
+            if nxt in 'bf':
+                raise LuaPatternError(f'%{nxt} is not supported: {src!r}')
+            if nxt.isdigit():
+                return f'(?:\\{nxt})', i + 2  # a back-reference takes no quantifier
+            item, i = _CLASSES.get(nxt) or re.escape(nxt), i + 2
+        elif ch == '[':
+            item, i = self._translate_set(src, i, end)
+        elif ch == '.':
+            item, i = '.', i + 1
+        else:
+            item, i = re.escape(ch), i + 1
+        if i < end and src[i] in _QUANTIFIERS:
+            return item + _QUANTIFIERS[src[i]], i + 1
+        return item, i
+
     @staticmethod
-    def _translate_set(src, i, end):
+    def _translate_set(src: str, i: int, end: int) -> tuple[str, int]:
         """Translate the set starting at src[i] == '['; return (regex, next index)."""
         j = i + 1
         parts = ['[']

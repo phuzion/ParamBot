@@ -1,0 +1,100 @@
+"""Everything the bot asks of the wiki, in one place.
+
+The rest of the bot reaches the wiki only through a Wiki object, which makes
+it easy to see what the bot does there, and lets the tests use a fake wiki.
+Pages are Pywikibot Page objects; the WikiPage protocol lists the parts of
+them the bot relies on.
+"""
+
+from collections.abc import Iterable, Iterator
+from typing import Any, Protocol
+
+import pywikibot
+
+# An article title to expand templates against, so {{main other}} and the
+# like behave as they would in an article.
+PROBE_TITLE = 'ParamBot probe'
+BATCH = 50  # titles per API request
+
+
+class WikiPage(Protocol):
+    """The parts of a Pywikibot Page the bot uses (with Pywikibot's names,
+    camelCase included)."""
+
+    text: str
+    content_model: str
+
+    def title(self, *, with_ns: bool = True) -> str: ...
+    def namespace(self) -> Any: ...
+    def exists(self) -> bool: ...
+    def isRedirectPage(self) -> bool: ...
+    def getRedirectTarget(self) -> 'WikiPage': ...
+    def redirects(self, *, namespaces: list[int]) -> Iterable['WikiPage']: ...
+    def templates(self) -> list['WikiPage']: ...
+    def protection(self) -> dict[str, tuple[str, str]]: ...
+    def has_permission(self, action: str = 'edit') -> bool: ...
+    def botMayEdit(self) -> bool: ...
+    def getOldVersion(self, oldid: int) -> str: ...
+    def revisions(self, total: int | None = None) -> Iterable[Any]: ...
+    def save(self, *, summary: str, minor: bool, bot: bool, quiet: bool) -> None: ...
+
+
+class Wiki:
+    """A wiki, through Pywikibot."""
+
+    def __init__(self, site: Any) -> None:
+        self.site = site
+
+    # -- the account -------------------------------------------------------
+
+    def login(self) -> str:
+        """Log in with the account in user-config.py; return its name."""
+        self.site.login()
+        return str(self.site.username())
+
+    def has_right(self, right: str) -> bool:
+        return bool(self.site.has_right(right))
+
+    # -- pages -------------------------------------------------------------
+
+    def page(self, title: str, ns: int = 0) -> WikiPage:
+        """A page, not yet loaded.  ns is the namespace for titles without a
+        prefix: 10 for templates."""
+        page: WikiPage = pywikibot.Page(self.site, title, ns=ns)
+        return page
+
+    def load(self, pages: Iterable[WikiPage], *, templates: bool = False) -> Iterator[WikiPage]:
+        """Load pages' text and details in batches, yielding them as they
+        arrive.  With templates, also load the templates each page uses."""
+        yield from self.site.preloadpages(list(pages), groupsize=BATCH, templates=templates)
+
+    def load_titles(self, titles: Iterable[str], *, templates: bool = False
+                    ) -> dict[str, WikiPage]:
+        """{title: loaded page} for titles, in one batch."""
+        pages = {title: self.page(title) for title in titles}
+        loaded = {p.title(): p for p in self.load(pages.values(), templates=templates)}
+        return {title: loaded.get(page.title(), page) for title, page in pages.items()}
+
+    def expand(self, text: str) -> str:
+        """text with its templates expanded, as if it were in an article."""
+        return str(self.site.expand_text(text, title=PROBE_TITLE))
+
+    # -- categories --------------------------------------------------------
+
+    def category_sizes(self, titles: list[str]) -> dict[str, int | None]:
+        """The number of pages in each category.  None for a category that
+        has neither a page nor any members."""
+        sizes: dict[str, int | None] = {}
+        for i in range(0, len(titles), BATCH):
+            data = self.site.simple_request(
+                action='query', prop='categoryinfo', titles='|'.join(titles[i:i + BATCH]),
+                formatversion=2).submit()
+            for info in data['query']['pages']:
+                if 'categoryinfo' in info:
+                    sizes[info['title']] = info['categoryinfo'].get('pages', 0)
+                elif info.get('missing'):
+                    sizes[info['title']] = None
+        return sizes
+
+    def category_members(self, category: str, namespaces: Iterable[int]) -> Iterator[WikiPage]:
+        yield from pywikibot.Category(self.site, category).members(namespaces=list(namespaces))

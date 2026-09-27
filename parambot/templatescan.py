@@ -1,9 +1,9 @@
 """Reading a template's own parameter checks from its source.
 
-``known_params`` pulls the whitelist out of the template's
+``known_params`` pulls the list of accepted parameters out of the template's
 ``{{#invoke:Check for unknown parameters|check|...}}`` call.  The bot uses it
 to leave a rule alone while the template still accepts the old name, and to
-refuse to rename anything to a name the template does not accept.
+refuse to rename anything to a name the template doesn't accept.
 
 ``scaffold_table`` turns the template's
 ``{{#invoke:Check for deprecated parameters|check|...}}`` call into a rules
@@ -11,8 +11,11 @@ table for the rules page.
 """
 
 import re
+from collections.abc import Iterable, Iterator
 
 import mwparserfromhell
+from mwparserfromhell.nodes import Template
+from mwparserfromhell.wikicode import Wikicode
 
 from .luapattern import LuaPattern, LuaPatternError
 from .wikitext import normalize_category, normalize_template_name, param_name, strip_comments
@@ -46,6 +49,7 @@ PUSHPIN_MAP_PARAMS = frozenset('''
 
 _UNKNOWN_MODULE = 'Check for unknown parameters'
 _DEPRECATED_MODULE = 'Check for deprecated parameters'
+_NOT_RULES = ('_category', 'ignoreblank', 'preview')  # settings of the deprecated check
 
 
 class KnownParams:
@@ -54,73 +58,55 @@ class KnownParams:
     ``unknown_text`` is the check's raw ``unknown=`` wikitext, which holds
     the category link for pages with unknown parameters."""
 
-    def __init__(self, names=(), patterns=(), unknown_text=None):
+    def __init__(self, names: Iterable[str] = (), patterns: Iterable[LuaPattern] = (),
+                 unknown_text: str | None = None) -> None:
         self.names = set(names)
         self.patterns = list(patterns)
         self.unknown_text = unknown_text
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns)'
 
-    def __contains__(self, name):
-        return name in self.names or any(p.fullmatch(name) for p in self.patterns)
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and (
+            name in self.names or any(p.fullmatch(name) for p in self.patterns))
 
 
-def _invokes(code, module):
-    """Yield {{#invoke:module|check|...}} calls in parsed wikitext."""
-    for tpl in code.filter_templates(recursive=True):
-        name = ' '.join(strip_comments(tpl.name).replace('_', ' ').split())
-        m = re.fullmatch(r'#invoke\s*:\s*(.+)', name, re.IGNORECASE)
-        if not m:
-            continue
-        target = re.sub(r'^module\s*:\s*', '', m.group(1), flags=re.IGNORECASE)
-        if normalize_template_name(target) != module:
-            continue
-        if not tpl.params or tpl.params[0].showkey:
-            continue
-        if strip_comments(tpl.params[0].value).strip() != 'check':
-            continue
-        yield tpl
-
-
-def known_params(source):
-    """Return the KnownParams declared in a template's source, or None if the
+def known_params(source: str) -> KnownParams | None:
+    """The KnownParams declared in a template's source, or None if the
     template has no unknown-parameter check the bot can read."""
-    code = mwparserfromhell.parse(source)
-    found = False
-    names = set()
-    patterns = []
-    unknown_text = None
-    for tpl in _invokes(code, _UNKNOWN_MODULE):
-        found = True
-        if unknown_text is None and tpl.has('unknown'):
-            unknown_text = str(tpl.get('unknown').value).strip() or None
-        for param in tpl.params[1:]:
+    calls = list(_invokes(mwparserfromhell.parse(source), _UNKNOWN_MODULE))
+    if not calls:
+        return None
+    known = KnownParams()
+    for call in calls:
+        if known.unknown_text is None and call.has('unknown'):
+            known.unknown_text = str(call.get('unknown').value).strip() or None
+        for param in call.params[1:]:
             value = strip_comments(param.value).strip()
             if not param.showkey:
                 if value and '{' not in value:
-                    names.add(value)
+                    known.names.add(value)
                 continue
             key = param_name(param)
             if re.fullmatch(r'regexp[1-9][0-9]*', key):
                 try:
-                    patterns.append(LuaPattern(value))
+                    known.patterns.append(LuaPattern(value))
                 except LuaPatternError:
-                    # A pattern we cannot read might cover anything.
-                    return None
+                    return None  # a pattern we can't read might cover anything
             elif key == 'mapframe_args' and value:
-                names |= MAPFRAME_PARAMS
+                known.names |= MAPFRAME_PARAMS
             elif key == 'pushpin_map_args' and value:
-                names |= PUSHPIN_MAP_PARAMS
-    return KnownParams(names, patterns, unknown_text) if found else None
+                known.names |= PUSHPIN_MAP_PARAMS
+    return known
 
 
 _CATEGORY_LINK_RE = re.compile(r'\[\[\s*:?\s*category\s*:\s*([^|\]]+)', re.IGNORECASE)
 
 
-def categories_in(wikitext):
+def categories_in(wikitext: str) -> list[str]:
     """The categories linked in (expanded) wikitext, normalized, in order."""
-    out = []
+    out: list[str] = []
     for name in _CATEGORY_LINK_RE.findall(wikitext):
         category = normalize_category(name)
         if category not in out:
@@ -128,70 +114,28 @@ def categories_in(wikitext):
     return out
 
 
-_NUMBER_GROUP_RE = re.compile(r'\(%d[*+?]?\)')
+def _invokes(code: Wikicode, module: str) -> Iterator[Template]:
+    """The {{#invoke:module|check|...}} calls in parsed wikitext."""
+    for call in code.filter_templates(recursive=True):
+        name = ' '.join(strip_comments(call.name).replace('_', ' ').split())
+        m = re.fullmatch(r'#invoke\s*:\s*(.+)', name, re.IGNORECASE)
+        if not m:
+            continue
+        target = re.sub(r'^module\s*:\s*', '', m.group(1), flags=re.IGNORECASE)
+        if (normalize_template_name(target) == module and call.params
+                and not call.params[0].showkey
+                and strip_comments(call.params[0].value).strip() == 'check'):
+            yield call
 
 
-def _pattern_to_hash(pattern, replacement):
-    """Turn a Lua pattern rule such as ``blank(%d*)_name = custom_label%1_sec1``
-    into "#" form (``blank#_name``, ``custom_label#_sec1``), or return None if
-    it uses anything but digit groups."""
-    if '#' in pattern or '#' in replacement:
-        return None
-    parts = _NUMBER_GROUP_RE.split(pattern)
-    groups = len(parts) - 1
-    if not groups:
-        return None
-    literal = []
-    for part in parts:
-        text = []
-        i = 0
-        while i < len(part):
-            c = part[i]
-            if c == '%':
-                if i + 1 >= len(part) or part[i + 1].isalnum():
-                    return None                 # a class such as %a
-                text.append(part[i + 1])        # %- is a real hyphen
-                i += 2
-            elif c in '^$().[]*+-?':
-                return None                     # anything cleverer than digits
-            else:
-                text.append(c)
-                i += 1
-        literal.append(''.join(text))
-    refs = [int(n) for n in re.findall(r'%([0-9])', replacement.replace('%%', ''))]
-    if refs != list(range(1, groups + 1)):
-        return None
-    new = re.sub(r'%[0-9]', '#', replacement.replace('%%', '\0')).replace('\0', '%')
-    return '#'.join(literal), new
+# -- scaffolding a rules table ---------------------------------------------
 
-
-def scaffold_table(template, source):
+def scaffold_table(template: str, source: str) -> tuple[str | None, list[str]]:
     """Build a rules table from the template's deprecated-parameter check.
 
     Returns (wikitext, warnings), or (None, []) if the template has no such
     check.  Warnings name the patterns that couldn't be turned into rows."""
-    code = mwparserfromhell.parse(source)
-    pairs = []
-    warnings = []
-    for tpl in _invokes(code, _DEPRECATED_MODULE):
-        for param in tpl.params[1:]:
-            if not param.showkey:
-                continue
-            key = param_name(param)
-            value = strip_comments(param.value).strip()
-            if key in ('_category', 'ignoreblank', 'preview'):
-                continue
-            if key == '_remove':
-                pairs += [(name.strip(), None) for name in value.split(';') if name.strip()]
-            elif re.fullmatch(r'_regexp[1-9][0-9]*', key):
-                parts = re.split(r'\s*=\s*', value)
-                converted = _pattern_to_hash(*parts) if len(parts) == 2 else None
-                if converted:
-                    pairs.append(converted)
-                else:
-                    warnings.append(f'{key} = {value}')
-            elif value:
-                pairs.append((key, value))
+    pairs, warnings = _deprecated_pairs(mwparserfromhell.parse(source))
     if not pairs and not warnings:
         return None, []
     template = normalize_template_name(template)
@@ -203,3 +147,68 @@ def scaffold_table(template, source):
         lines.append(f'<!-- Could not turn "{warning}" into a row. Add rows for it by hand. -->')
     lines.append('|}')
     return '\n'.join(lines), warnings
+
+
+def _deprecated_pairs(code: Wikicode) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """(old, new) pairs from the deprecated-parameter checks (new is None for
+    removals), and the patterns that couldn't be converted."""
+    pairs: list[tuple[str, str | None]] = []
+    warnings: list[str] = []
+    for call in _invokes(code, _DEPRECATED_MODULE):
+        for param in call.params[1:]:
+            key = param_name(param)
+            value = strip_comments(param.value).strip()
+            if not param.showkey or key in _NOT_RULES:
+                continue
+            if key == '_remove':
+                pairs += [(name.strip(), None) for name in value.split(';') if name.strip()]
+            elif re.fullmatch(r'_regexp[1-9][0-9]*', key):
+                parts = re.split(r'\s*=\s*', value)
+                converted = _to_number_form(parts[0], parts[1]) if len(parts) == 2 else None
+                if converted:
+                    pairs.append(converted)
+                else:
+                    warnings.append(f'{key} = {value}')
+            elif value:
+                pairs.append((key, value))
+    return pairs, warnings
+
+
+_NUMBER_GROUP_RE = re.compile(r'\(%d[*+?]?\)')
+
+
+def _to_number_form(pattern: str, replacement: str) -> tuple[str, str] | None:
+    """Turn a Lua pattern rule such as ``blank(%d*)_name = custom_label%1_sec1``
+    into "#" form (``blank#_name``, ``custom_label#_sec1``), or None if it
+    uses anything but digit groups."""
+    if '#' in pattern or '#' in replacement:
+        return None
+    parts = _NUMBER_GROUP_RE.split(pattern)
+    groups = len(parts) - 1
+    literals = [_literal(part) for part in parts]
+    if not groups or None in literals:
+        return None
+    refs = [int(n) for n in re.findall(r'%([0-9])', replacement.replace('%%', ''))]
+    if refs != list(range(1, groups + 1)):
+        return None
+    new = re.sub(r'%[0-9]', '#', replacement.replace('%%', '\0')).replace('\0', '%')
+    return '#'.join(str(literal) for literal in literals), new
+
+
+def _literal(part: str) -> str | None:
+    """A piece of Lua pattern as plain text, or None if it's more than that."""
+    text = []
+    i = 0
+    while i < len(part):
+        c = part[i]
+        if c == '%':
+            if i + 1 >= len(part) or part[i + 1].isalnum():
+                return None             # a class such as %a
+            text.append(part[i + 1])    # %- is a real hyphen
+            i += 2
+        elif c in '^$().[]*+-?':
+            return None                 # anything cleverer than digits
+        else:
+            text.append(c)
+            i += 1
+    return ''.join(text)

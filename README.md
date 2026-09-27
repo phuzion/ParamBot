@@ -167,11 +167,27 @@ Needs Python 3.11 or later.
 python -m venv .venv
 source .venv/bin/activate         # on Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-pytest
 ```
 
-`tests/test_docs.py` checks every example in the rule-writer instructions, so
-keep the instructions in step with the code.
+Before pushing, run the same checks GitHub runs:
+
+```bash
+ruff check .     # lint
+mypy             # type-check
+pytest           # tests
+```
+
+[GitHub Actions](.github/workflows/tests.yml) runs all three on Python 3.11,
+3.12 and 3.13 for every push and every pull request.
+
+- **No test touches a real wiki.** They use a fake one from
+  [`tests/fakes.py`](tests/fakes.py), which has the same methods as
+  `parambot.wiki.Wiki`.
+- **`tests/test_docs.py`** checks every example in the rule-writer
+  instructions, so keep the instructions in step with the code.
+- **`tests/test_readme.py`** checks that this README's links and file names
+  point at files that exist, and that the project layout below lists every
+  module.
 
 ## Usage
 
@@ -187,7 +203,7 @@ parambot scaffold "Infobox settlement"
 
 | Command | What it does |
 |---|---|
-| `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.wiki` instead of editing. |
+| `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.mediawiki` instead of editing. |
 | `run --live` | Edits for real. Needs a bot account and a `user-config.py` (see [Deploying](#deploying-on-toolforge)). |
 | `check-rules` | Checks the bot's own pages, then every rule against its template and category, without looking at any articles. Exits 1 if there are problems. |
 | `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
@@ -263,18 +279,32 @@ For a BRFA trial, run by hand first with
 
 | Path | Contents |
 |---|---|
-| `parambot/cli.py` | The command line. |
-| `parambot/bot.py` | A run: pre-flight checks, category polling, per-page processing, the report. |
-| `parambot/rules.py` | Reading the rules page. |
-| `parambot/fixer.py` | Applying rules to a page's wikitext. |
-| `parambot/templatescan.py` | Reading a template's accepted parameters; `scaffold`. |
+A run goes `cli` → `bot`, which checks the bot's pages (`botpages`), reads the
+rules (`rules`), checks them against the templates (`prepare`), then applies
+them to each article (`fixer`) and writes the report (`report`). Only `wiki`
+talks to the wiki.
+
+| Path | Contents |
+|---|---|
+| `parambot/cli.py` | The command line: one function per command. |
+| `parambot/options.py` | The settings for a run. |
+| `parambot/bot.py` | A run: pre-flight checks, finding pages in the categories, fixing them, the report. |
+| `parambot/botpages.py` | Checking the bot's own pages (user page, rules, Run and report pages). |
+| `parambot/rules.py` | Reading the rules page into a `RuleSet` per template. |
+| `parambot/wikitable.py` | Reading wikitables: captions, header rows, `rowspan` and `colspan`. |
+| `parambot/prepare.py` | Checking each `RuleSet` against its template, giving the `TemplateRules` the fixer applies. |
+| `parambot/fixer.py` | Applying `TemplateRules` to a page's wikitext. |
+| `parambot/templatescan.py` | Reading a template's own parameter checks; `scaffold`. |
 | `parambot/luapattern.py` | Lua patterns, as used in templates, translated to Python regexes. |
 | `parambot/report.py` | The report page. |
+| `parambot/messages.py` | Everything the bot says on the report, in edit summaries and when it stops. |
+| `parambot/wiki.py` | Everything the bot asks of the wiki, through Pywikibot. |
 | `parambot/wikitext.py` | Small wikitext helpers. |
 | `docs/rules-instructions.mediawiki` | Instructions for rule writers, for the wiki. |
 | `examples/rules.mediawiki` | An example rules page. |
 | `deploy/` | Toolforge job and Pywikibot config template. |
-| `tests/` | The test suite. |
+| `tests/` | The test suite; `tests/fakes.py` is the fake wiki. |
+| `.github/workflows/tests.yml` | The checks GitHub runs on every push and pull request. |
 
 ## Status
 

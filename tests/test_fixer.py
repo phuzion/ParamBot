@@ -1,8 +1,9 @@
 import textwrap
+from dataclasses import replace
 
 import pytest
 
-from parambot.fixer import fix_wikitext
+from parambot.fixer import TemplateRules, fix_wikitext
 from parambot.rules import parse_config
 from parambot.templatescan import KnownParams
 
@@ -31,21 +32,26 @@ RULES = '''
 
 
 @pytest.fixture
-def rulesets():
-    return list(parse_config(RULES).rulesets.values())
+def targets():
+    return [TemplateRules.unchecked(rs) for rs in parse_config(RULES).rulesets.values()]
 
 
-def fix(text, rulesets):
-    return fix_wikitext(textwrap.dedent(text).lstrip('\n'), rulesets)
+def with_settlement(targets, **changes):
+    """targets, with the Infobox settlement ones changed."""
+    return [replace(t, **changes) if t.template == 'Infobox settlement' else t for t in targets]
 
 
-def test_simple_rename(rulesets):
+def fix(text, targets):
+    return fix_wikitext(textwrap.dedent(text).lstrip('\n'), targets)
+
+
+def test_simple_rename(targets):
     r = fix('''
         {{Infobox settlement
         | name = Foo
         | imagesize = 250px
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == textwrap.dedent('''\
         {{Infobox settlement
         | name = Foo
@@ -57,14 +63,14 @@ def test_simple_rename(rulesets):
     assert r.issues == []
 
 
-def test_alignment_is_kept(rulesets):
+def test_alignment_is_kept(targets):
     r = fix('''
         {{Infobox settlement
         | name            = Foo
         | settlement_type = Town
         | image_caption   = A view
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == textwrap.dedent('''\
         {{Infobox settlement
         | name            = Foo
@@ -74,70 +80,71 @@ def test_alignment_is_kept(rulesets):
         ''')
 
 
-def test_unaligned_spacing_is_kept(rulesets):
-    r = fix('{{Infobox settlement|name=Foo|imagesize=250px|image_caption = A}}', rulesets)
+def test_unaligned_spacing_is_kept(targets):
+    r = fix('{{Infobox settlement|name=Foo|imagesize=250px|image_caption = A}}', targets)
     assert r.text == '{{Infobox settlement|name=Foo|image_size=250px|caption = A}}'
 
 
-def test_template_name_variants(rulesets):
-    r = fix('{{infobox_settlement |imagesize=1}}{{ Template:Infobox settlement\n|imagesize=2}}', rulesets)
-    assert r.text == '{{infobox_settlement |image_size=1}}{{ Template:Infobox settlement\n|image_size=2}}'
+def test_template_name_variants(targets):
+    r = fix('{{infobox_settlement |imagesize=1}}'
+            '{{ Template:Infobox settlement\n|imagesize=2}}', targets)
+    assert r.text == ('{{infobox_settlement |image_size=1}}'
+                      '{{ Template:Infobox settlement\n|image_size=2}}')
 
 
-def test_redirect_names(rulesets):
-    settlement = next(rs for rs in rulesets if rs.template == 'Infobox settlement')
-    settlement.names.add('Infobox city')
-    r = fix('{{infobox city|imagesize=1}}{{Infobox City|imagesize=1}}', rulesets)
+def test_redirect_names(targets):
+    targets = with_settlement(targets, names=frozenset({'Infobox settlement', 'Infobox city'}))
+    r = fix('{{infobox city|imagesize=1}}{{Infobox City|imagesize=1}}', targets)
     # Titles are case-sensitive after the first letter.
     assert r.text == '{{infobox city|image_size=1}}{{Infobox City|imagesize=1}}'
 
 
-def test_other_templates_untouched(rulesets):
+def test_other_templates_untouched(targets):
     text = '{{Infobox building|imagesize=250px}}{{Cite web|imagesize=1}}'
-    r = fix(text, rulesets)
+    r = fix(text, targets)
     assert r.text == text
     assert not r.changed
 
 
-def test_ignored_contexts(rulesets):
+def test_ignored_contexts(targets):
     text = ('<!-- {{Infobox settlement|imagesize=1}} -->'
             '<nowiki>{{Infobox settlement|imagesize=1}}</nowiki>'
             '<pre>{{Infobox settlement|imagesize=1}}</pre>'
             '<syntaxhighlight lang="wikitext">{{Infobox settlement|imagesize=1}}</syntaxhighlight>')
-    assert fix(text, rulesets).text == text
+    assert fix(text, targets).text == text
 
 
-def test_nested_templates(rulesets):
+def test_nested_templates(targets):
     r = fix('''
         {{Infobox person
         | name = X
         | module = {{Infobox settlement|embed=yes|imagesize=100px}}
         | alma_mater = [[Harvard]]
         }}
-        ''', rulesets)
+        ''', targets)
     assert '{{Infobox settlement|embed=yes|image_size=100px}}' in r.text
     assert '| education = [[Harvard]]' in r.text
 
 
-def test_value_with_nested_template_and_newlines(rulesets):
+def test_value_with_nested_template_and_newlines(targets):
     r = fix('''
         {{Infobox settlement
         | image_caption = {{hlist
           |a
           |b}}
         }}
-        ''', rulesets)
+        ''', targets)
     assert '| caption = {{hlist\n  |a\n  |b}}\n' in r.text
 
 
-def test_new_param_empty(rulesets):
+def test_new_param_empty(targets):
     r = fix('''
         {{Infobox settlement
         | name       = Foo
         | image_size =
         | imagesize  = 250px
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == textwrap.dedent('''\
         {{Infobox settlement
         | name       = Foo
@@ -147,128 +154,126 @@ def test_new_param_empty(rulesets):
     assert r.changes[0].action == 'filled'
 
 
-def test_new_param_empty_with_comment(rulesets):
+def test_new_param_empty_with_comment(targets):
     r = fix('''
         {{Infobox settlement
         | image_size = <!-- default 250px -->
         | imagesize = 200px
         }}
-        ''', rulesets)
+        ''', targets)
     assert '| image_size = 200px <!-- default 250px -->\n' in r.text
     assert 'imagesize' not in r.text
 
 
-def test_same_value_duplicate(rulesets):
+def test_same_value_duplicate(targets):
     r = fix('''
         {{Infobox settlement
         | image_size = 250px
         | imagesize = 250px
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == '{{Infobox settlement\n| image_size = 250px\n}}\n'
     assert r.changes[0].action == 'duplicate'
     assert r.substantive
 
 
-def test_conflict_is_reported_not_changed(rulesets):
+def test_conflict_is_reported_not_changed(targets):
     text = '''
         {{Infobox settlement
         | image_size = 250px
         | imagesize = 300px
         }}
         '''
-    r = fix(text, rulesets)
+    r = fix(text, targets)
     assert not r.changed
     assert len(r.issues) == 1
     assert r.issues[0].param == 'imagesize'
     assert 'both set' in r.issues[0].reason
 
 
-def test_conflict_merge(rulesets):
+def test_conflict_merge(targets):
     r = fix('''
         {{Infobox person
         | education  = BA in Engineering
         | alma_mater = [[NYU]]
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == '{{Infobox person\n| education  = BA in Engineering<br />[[NYU]]\n}}\n'
     assert r.changes[0].action == 'merged'
 
 
-def test_two_old_names_same_target(rulesets):
+def test_two_old_names_same_target(targets):
     r = fix('''
         {{Infobox person
         | alma_mater = [[Harvard]]
         | alma mater = [[Harvard]]
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.text == '{{Infobox person\n| education = [[Harvard]]\n}}\n'
 
 
-def test_blank_old_param_is_cosmetic(rulesets):
+def test_blank_old_param_is_cosmetic(targets):
     r = fix('''
         {{Infobox settlement
         | name = Foo
         | imagesize =
         }}
-        ''', rulesets)
+        ''', targets)
     assert r.changed
     assert not r.substantive
 
 
-def test_blank_old_with_new_present(rulesets):
-    r = fix('{{Infobox settlement|image_size=250px|imagesize=}}', rulesets)
+def test_blank_old_with_new_present(targets):
+    r = fix('{{Infobox settlement|image_size=250px|imagesize=}}', targets)
     assert r.text == '{{Infobox settlement|image_size=250px}}'
     assert not r.substantive
 
 
-def test_cosmetic_rides_along_with_real_fix(rulesets):
-    r = fix('{{Infobox settlement|imagesize=|image_caption=A}}', rulesets)
+def test_cosmetic_rides_along_with_real_fix(targets):
+    r = fix('{{Infobox settlement|imagesize=|image_caption=A}}', targets)
     assert r.text == '{{Infobox settlement|image_size=|caption=A}}'
     assert r.substantive
 
 
-def test_pattern_rule(rulesets):
-    r = fix('{{Infobox settlement|blank_name=Area|blank2_name=Zone}}', rulesets)
+def test_pattern_rule(targets):
+    r = fix('{{Infobox settlement|blank_name=Area|blank2_name=Zone}}', targets)
     assert r.text == '{{Infobox settlement|custom_label_sec1=Area|custom_label2_sec1=Zone}}'
 
 
-def test_remove_rule(rulesets):
-    r = fix('{{Infobox settlement\n| name = Foo\n| pushpin_outside = yes\n}}', rulesets)
+def test_remove_rule(targets):
+    r = fix('{{Infobox settlement\n| name = Foo\n| pushpin_outside = yes\n}}', targets)
     assert r.text == '{{Infobox settlement\n| name = Foo\n}}'
     assert r.substantive
 
 
-def test_positional_params_untouched(rulesets):
+def test_positional_params_untouched(targets):
     text = '{{Infobox settlement|imagesize}}'
-    assert fix(text, rulesets).text == text
+    assert fix(text, targets).text == text
 
 
-def test_param_name_with_comment(rulesets):
+def test_param_name_with_comment(targets):
     text = '{{Infobox settlement|imagesize<!--x-->=1}}'
-    r = fix(text, rulesets)
+    r = fix(text, targets)
     assert r.text == text
     assert 'comment' in r.issues[0].reason
 
 
-def test_known_params_old_still_accepted(rulesets):
-    settlement = next(rs for rs in rulesets if rs.template == 'Infobox settlement')
-    settlement.known = KnownParams({'imagesize', 'image_size', 'caption'})
-    r = fix('{{Infobox settlement|imagesize=1|image_caption=A}}', rulesets)
+def test_known_params_old_still_accepted(targets):
+    targets = with_settlement(targets, known=KnownParams({'imagesize', 'image_size', 'caption'}))
+    r = fix('{{Infobox settlement|imagesize=1|image_caption=A}}', targets)
     # imagesize still works, so it is left for the deprecation run.
     assert r.text == '{{Infobox settlement|imagesize=1|caption=A}}'
 
 
-def test_known_params_target_not_accepted(rulesets):
-    settlement = next(rs for rs in rulesets if rs.template == 'Infobox settlement')
-    settlement.known = KnownParams({'caption'})
-    r = fix('{{Infobox settlement|imagesize=1}}', rulesets)
+def test_known_params_target_not_accepted(targets):
+    targets = with_settlement(targets, known=KnownParams({'caption'}))
+    r = fix('{{Infobox settlement|imagesize=1}}', targets)
     assert not r.changed
     assert 'does not accept "image_size"' in r.issues[0].reason
 
 
-def test_idempotent(rulesets):
+def test_idempotent(targets):
     text = '{{Infobox settlement\n| imagesize = 1\n| image_caption = A\n}}'
-    once = fix(text, rulesets)
-    twice = fix_wikitext(once.text, rulesets)
+    once = fix(text, targets)
+    twice = fix_wikitext(once.text, targets)
     assert not twice.changed
