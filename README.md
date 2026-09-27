@@ -1,84 +1,102 @@
 # ParamBot
 
-A Wikipedia bot for the request
+A Wikipedia bot that puts back parameter renames that reverts have undone. It
+was written for the English Wikipedia bot request
 [Bot to regularly check for restored deprecated parameters](https://en.wikipedia.org/wiki/Wikipedia:Bot_requests#Bot_to_regularly_check_for_restored_deprecated_parameters).
 
-After a deprecation run has renamed an infobox's old parameters and support for
-the old names has been removed, a revert (often of LLM-generated content) can
-bring the old names back. The template then silently ignores them and the page
-lands in *Pages using <template> with unknown parameters*. ParamBot polls those
-categories on a schedule and re-applies **only** the parameter renames. It
-never reverts the edit that brought them back.
+After a deprecation cleanup, a template stops accepting its old parameter
+names. Reverting an article to an older version, often to remove LLM-written
+text, can bring those names back. The infobox then silently drops that
+information, and the article lands in the template's *Pages using
+&lt;template&gt; with unknown parameters* category. ParamBot checks those
+categories daily and renames the old parameters to the new ones. It never
+reverts anyone's edit and changes nothing else.
 
-## How it works
+**Status:** not deployed. There is no bot account and no bot approval request
+(BRFA) yet, and "ParamBot" is a placeholder name. See [Status](#status).
 
-1. It reads the rules page (`User:ParamBot/Rules` by default).
-2. It checks the size of every template's unknown-parameters category in one
-   batched query. Empty categories cost nothing more.
-3. For each populated category it reads the template's own
-   `{{#invoke:Check for unknown parameters|check|...}}` whitelist and its
-   redirects, then checks each member page (main namespace only).
-4. On each page it renames old parameters in calls to that template (or its
-   redirects) and saves, or, in a dry run, writes a diff.
-5. It rewrites the report page (`User:ParamBot/Report`) with anything a human
-   needs to look at. The report is only saved when its findings change.
+## What it does to a page
 
-### Safety rules
-
-- **A rule stays inactive while the template still accepts the old name.**
-  Rules can be added before support is removed; they switch on by themselves
-  once the old name leaves the template's whitelist. Until then the
-  deprecation runs and the deprecated-parameters category handle it.
-- **Never renames to a name the template doesn't accept.** A typo in a rule
-  shows up on the report instead of breaking infoboxes.
-- **No whitelist, no rules.** If the bot can't read a template's
-  `Check for unknown parameters` list, it switches that template's rules off
-  and says so on the report. Without the list, a backwards rule
-  (`image_size = imagesize`) would break every page it touched.
-- **No cosmetic-only edits.** If the only changes are to empty parameters
-  (which don't trigger the category with `ignoreblank=y`), the page is left
-  alone.
-- **Conflicts go to humans.** If the old and new parameters are both set to
-  different values (the `alma_mater` + `education` case), the page is listed
-  on the report and that parameter is left alone. A row can opt in with
-  `merge` in an *If both are set* column, which appends the old value to the
-  new one.
-- **No edit wars.** If the bot has edited the page in the last 30 days
-  (`--cooldown-days`), it doesn't repeat the fix and lists the page instead.
-  Someone may have put the old parameter back on purpose.
-- Honours `{{bots}}`/`{{nobots}}`. Only touches the main namespace. Ignores
-  templates inside comments, `<nowiki>`, `<pre>` and `<syntaxhighlight>`.
-- Keeps the page's formatting, including lined-up `=` signs.
-- Live runs only happen when `User:ParamBot/Run` says `yes`. The bot checks
-  it at the start and again before every edit, so changing it to anything
-  else stops the bot straight away. After that the bot makes no more wiki
-  edits, not even the report; the report goes to a local file instead.
-- **Failures don't lose the report.** An error on one page is logged, the page
-  is listed as not edited, and the run carries on. Five failures in a row, or
-  any failure outside the page loop, stop the run. The report is still
-  saved, with an *Errors* section (or written locally if the wiki can't be
-  reached), and the process exits non-zero so Toolforge emails the operator.
+For each old parameter it finds in a call to the template:
 
 | Old parameter | New parameter | What the bot does |
 |---|---|---|
-| set | absent | renames old → new |
-| set | present but empty | moves the value into new, removes old |
-| set | same value | removes old |
-| set | different value | lists the page for review (or merges, if the row says `merge`) |
-| empty | anything | nothing, unless the page is being edited anyway |
+| filled in | missing | renames the old parameter |
+| filled in | present but empty | moves the value into the new parameter and removes the old one |
+| filled in | same value | removes the old one |
+| filled in | different value | lists the page for human review, or merges the values if the rule says `merge` |
+| empty | anything | nothing, unless it's editing the page anyway |
 
-## The rules page
+Rules can also say `remove`, for parameters that were dropped with no
+replacement.
 
-**Rule writers should read
-[`docs/rules-instructions.wiki`](docs/rules-instructions.wiki).** It's
-written for editors rather than programmers, and it belongs on the wiki at
-`User:ParamBot/Rules/Instructions`, transcluded at the top of the rules page
-(see [`examples/rules.wiki`](examples/rules.wiki)). `tests/test_docs.py`
-checks that every example in it is valid, so keep it in step with the code.
+## How a run works
 
-In short, each template's rules are an ordinary wikitable, so the protected
-rules page reads as what it is. The caption names the template, column 1
-holds the old names and column 2 the new name or `remove`:
+1. **Pre-flight checks** (live runs only). It logs in as the bot account,
+   checks the account has the `bot` right (unless `--trial` is given), and
+   checks that `User:ParamBot/Run` says `yes`.
+2. **Reads the rules** from `User:ParamBot/Rules`.
+3. **Checks every template the rules name.** It loads each template's
+   redirects and its `{{#invoke:Check for unknown parameters|check|...}}`
+   list of accepted parameters, and reports rules that can't work.
+4. **Checks the size of each template's unknown-parameters category,** 50 at
+   a time, and skips the empty ones.
+5. **Fixes each article** in the categories that have pages, then saves it,
+   or writes a diff in a dry run.
+6. **Writes the report** to `User:ParamBot/Report`, listing articles that
+   need human review, articles it skipped and why, and problems in the rules.
+   The report is only saved when its contents change.
+
+## Safeguards
+
+**What it will edit**
+
+- **Only broken parameters.** A rule does nothing while the template still
+  accepts the old name, so rules can be added before support is removed and
+  switch on by themselves once it is.
+- **Only to accepted names.** It never renames to a name the template doesn't
+  accept, so a typo in a rule shows up on the report instead of breaking
+  infoboxes.
+- **No readable list, no rules.** If the bot can't read a template's list of
+  accepted parameters, it switches that template's rules off and says so on
+  the report. Without the list, a backwards rule such as
+  `image_size → imagesize` would break every page it touched.
+- **No cosmetic-only edits.** If the only changes are to empty parameters,
+  the page is left alone.
+- **Conflicts go to humans.** If the old and new parameters have different
+  values, the page is listed for review, unless that rule says `merge`.
+- **Articles only.** It edits main-namespace pages only, and honours
+  `{{bots}}` and `{{nobots}}`.
+- **No edit wars.** It won't edit a page again within 30 days of its last
+  edit there (`--cooldown-days`), in case the old parameter was put back on
+  purpose. The page is listed instead.
+- **Layout is kept.** It keeps the page's formatting, including lined-up `=`
+  signs. It ignores template calls inside comments, `<nowiki>`, `<pre>` and
+  `<syntaxhighlight>`.
+
+**Stopping and failures**
+
+- **Emergency stop.** The bot checks `User:ParamBot/Run` before every edit.
+  Changing it to anything but `yes` stops the bot straight away. After that
+  it makes no more wiki edits, not even the report, which is written to a
+  local file instead.
+- **Edit cap.** At most 100 edits per run (`--max-edits`).
+- **Errors are reported.** An error on one page is logged, the page is listed
+  as not edited, and the run carries on. Five failures in a row, or any
+  failure outside the page loop, stop the run. The report is still saved, with
+  an *Errors* section (or written locally if the wiki can't be reached), and
+  the process exits with a failure code so Toolforge emails the operator.
+
+## Writing rules
+
+Rule writers should read
+[`docs/rules-instructions.wiki`](docs/rules-instructions.wiki). It's written
+for editors rather than programmers, and belongs on the wiki at
+`User:ParamBot/Rules/Instructions`, shown at the top of the rules page. See
+[`examples/rules.wiki`](examples/rules.wiki) for a full rules page.
+
+Each template's rules are an ordinary wikitable, so the rules page reads on the
+wiki as exactly what the bot will do:
 
 ```wikitext
 {| class="wikitable"
@@ -95,86 +113,147 @@ holds the old names and column 2 the new name or `remove`:
 |}
 ```
 
-- `#` stands for no number or any number (`termstart`, `termstart2`, ...).
-  It replaces the Lua patterns templates use.
-- An optional column headed *If both are set* can say `merge`. Any other extra
-  columns are notes.
-- A category link in the caption changes the category the bot watches.
-- `rowspan`/`colspan` work, and text in a cell besides the `{{para}}` names is
-  a note. Existing deprecation tables can be pasted in with a caption added.
-- The one-line `{{AWB rename template parameter|...}}` format from
-  [WP:AWB/RTP](https://en.wikipedia.org/wiki/Wikipedia:AutoWikiBrowser/Rename_template_parameters)
-  also works, since that template exists.
+- **Caption:** names the template. A category link in the caption changes the
+  category the bot watches.
+- **Columns:** column 1 holds the old names, column 2 the new name or
+  `remove`. An optional column headed *If both are set* can say `merge`;
+  other extra columns are notes.
+- **Numbers:** `#` stands for no number or any number, so `termstart#`
+  covers `termstart`, `termstart2`, `termstart12`, and so on.
+- **Notes and spans:** text in a cell besides the `{{para}}` names is a note,
+  and `rowspan`/`colspan` work. Existing deprecation tables can be pasted in
+  with a caption added.
+- **One-line format:** `{{AWB rename template parameter|Template|old|new}}`
+  lines, in the format of
+  [WP:AWB/RTP](https://en.wikipedia.org/wiki/Wikipedia:AutoWikiBrowser/Rename_template_parameters),
+  also work.
 
-`parambot scaffold "Infobox settlement"` turns a template's
-`{{#invoke:Check for deprecated parameters|check|...}}` block into a table,
-converting its Lua patterns to `#` rows and flagging any that can't be
-converted. Add `--oldid` to read the block from a revision from before it was
-removed.
+The rules page decides what the bot edits, so it should be protected;
+template-editor protection is the natural level. The safeguards limit what a
+bad rule can do, because the old name has to be one the template rejects and
+the new name one it accepts.
 
-Every run checks every table against its template, so the report's
-*Rules page problems* section catches mistakes whether or not any article
-needs the rule yet. `parambot check-rules` runs the same checks from the
-command line.
+## Setup
 
-The rules page decides what the bot edits, so it should be protected
-(template-editor protection is the natural level). The safety rules above
-limit what a bad rule can do: the old name has to be one the template
-rejects, and the new name has to be one it accepts.
-
-## Running it
+Needs Python 3.11 or later.
 
 ```bash
 python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev]"   # .venv/bin/python on Linux
-.venv/Scripts/python -m pytest
+source .venv/bin/activate         # on Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+pytest
 ```
 
-Dry runs only read from the wiki and need no account or `user-config.py`:
+`tests/test_docs.py` checks every example in the rule-writer instructions, so
+keep the instructions in step with the code.
+
+## Usage
+
+With the virtual environment active:
 
 ```bash
-python -m parambot --rules-file examples/rules.wiki check-rules   # check rules against templates
-python -m parambot --rules-file examples/rules.wiki run           # writes out/edits-*.diff and out/report-*.wiki
-python -m parambot run --page "Some article" --template "Infobox person"
-python -m parambot run --page "User:Someone/sandbox" --any-namespace   # preview a sandbox
+parambot --rules-file examples/rules.wiki check-rules
+parambot --rules-file examples/rules.wiki run
+parambot run --page "Some article" --template "Infobox person"
+parambot run --page "User:Someone/sandbox" --any-namespace
+parambot scaffold "Infobox settlement"
 ```
 
-The bot only edits articles. `--any-namespace` lets `--page` name a sandbox
-or other non-article page, to see what the bot would do to a sample infobox.
-It's refused together with `--live`.
+| Command | What it does |
+|---|---|
+| `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.wiki` instead of editing. |
+| `run --live` | Edits for real. Needs a bot account and a `user-config.py` (see [Deploying](#deploying-on-toolforge)). |
+| `check-rules` | Checks every rule against its template and category without looking at any articles. Exits 1 if there are problems. |
+| `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
 
-Live runs need a bot account and a Pywikibot `user-config.py` (see
-[`deploy/`](deploy/)):
+Options that apply to every command go before the command name, for example
+`parambot --rules-file x.wiki run`.
 
-```bash
-python -m parambot run --live --trial --max-edits 50   # BRFA trial: no bot flag yet
-python -m parambot run --live                          # approved and flagged
-```
+| Option | Default | Meaning |
+|---|---|---|
+| `--bot-user NAME` | `ParamBot` | Account name. Also sets the default rules, report and run pages under `User:NAME/`. |
+| `--rules-page TITLE` | `User:<bot-user>/Rules` | Rules page to read. |
+| `--rules-file PATH` | | Read the rules from a local file instead. |
+| `--lang`, `--family` | `en`, `wikipedia` | Wiki to work on. |
+| `-v` | | Verbose logging. |
 
-`--bot-user` sets the account name, which also sets the default rules, report
-and run pages. Set `PARAMBOT_CONTACT` to put a contact URL or address in the
-User-Agent.
+Options for `run`:
 
-## Deployment (Toolforge)
+| Option | Default | Meaning |
+|---|---|---|
+| `--live` | off | Edit for real. |
+| `--trial` | off | Allow `--live` without the bot flag, for BRFA trial edits. |
+| `--max-edits N` | 100 | Stop after this many edits. |
+| `--cooldown-days N` | 30 | Don't edit a page the bot edited this recently. `0` turns this off. |
+| `--template NAME` | all | Only use this template's rules. Can be repeated. |
+| `--page TITLE` | | Only check this page, skipping the categories. Can be repeated. |
+| `--any-namespace` | off | With `--page`, allow non-articles such as sandboxes. Dry runs only. |
+| `--report-page`, `--run-page` | `User:<bot-user>/Report`, `/Run` | Pages to use instead. |
+| `--out-dir DIR` | `out` | Where dry runs, and live runs that can't save the report, write their files. |
 
-`deploy/jobs.yaml` runs the bot daily with the
+Dry runs don't need an account or a `user-config.py`. Set `PARAMBOT_CONTACT`
+to put a contact URL or email address in the User-Agent; the default is the
+bot's user page.
+
+`run` exits with 0 when the run finishes, and 1 when an error stopped it (the
+report is still written). It exits with 2 when it refused to start or was
+switched off: for example the Run page doesn't say `yes`, the rules page is
+missing, or the account is wrong.
+
+## Deploying on Toolforge
+
+[`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot daily at 04:17 UTC with the
 [Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework).
-`deploy/user-config.example.py` shows the Pywikibot settings, which log in with
-a [BotPassword](https://en.wikipedia.org/wiki/Special:BotPasswords) that has
-only the *Edit existing pages* grant.
 
-## Before filing a BRFA
+1. Check the repository out at `~/parambot`, and create a virtual environment
+   at `~/parambot/venv` with the package installed. Build it with the same
+   Python image the job uses (`python3.13`), for example in a one-off
+   `toolforge jobs run … --image python3.13 --wait` job, so the Python
+   versions match.
+2. On the bot account, create a
+   [bot password](https://en.wikipedia.org/wiki/Special:BotPasswords) with the
+   *High-volume (bot) access* and *Edit existing pages* grants.
+3. Copy [`deploy/user-config.example.py`](deploy/user-config.example.py) to
+   `~/parambot/user-config.py`, and put the bot password in
+   `~/parambot/user-password.py`. Both files are git-ignored.
+4. Create `User:ParamBot/Run` containing `yes`, and a placeholder
+   `User:ParamBot/Report`. *Edit existing pages* doesn't let the bot create
+   pages.
+5. Run `toolforge jobs load deploy/jobs.yaml`.
 
-Still open:
+For a BRFA trial, run by hand first with
+`parambot run --live --trial --max-edits 50`.
 
-- Account name. `ParamBot` is unregistered as of 2026-09-26, and every page
-  name follows from `--bot-user`.
-- Where the rules page lives and who can edit it (bot userspace plus
-  template-editor protection, or a Wikipedia-space page).
-- Cooldown length and run frequency (daily is the default).
-- Whether `remove` rows (deleting restored parameters that had no replacement)
-  and `merge` are wanted, or only renames. Zackmann08 described the bot as
-  changing "only those params it can directly replace".
+## Project layout
+
+| Path | Contents |
+|---|---|
+| `parambot/cli.py` | The command line. |
+| `parambot/bot.py` | A run: pre-flight checks, category polling, per-page processing, the report. |
+| `parambot/rules.py` | Reading the rules page. |
+| `parambot/fixer.py` | Applying rules to a page's wikitext. |
+| `parambot/templatescan.py` | Reading a template's accepted parameters; `scaffold`. |
+| `parambot/luapattern.py` | Lua patterns, as used in templates, translated to Python regexes. |
+| `parambot/report.py` | The report page. |
+| `parambot/wikitext.py` | Small wikitext helpers. |
+| `docs/rules-instructions.wiki` | Instructions for rule writers, for the wiki. |
+| `examples/rules.wiki` | An example rules page. |
+| `deploy/` | Toolforge job and Pywikibot config template. |
+| `tests/` | The test suite. |
+
+## Status
+
+The code is complete and tested against the live wiki in dry runs, but nothing
+has been edited on Wikipedia. Still to decide before filing a BRFA:
+
+- **Account name.** "ParamBot" was unregistered as of September 2026. Every
+  page name follows from `--bot-user`.
+- **Rules page.** Where it lives and who can edit it: the bot's userspace with
+  template-editor protection, or a Wikipedia-space page.
+- **Timing.** The cooldown length, and whether the bot should run daily.
+- **Scope.** Whether `remove` and `merge` rules are wanted, or only renames.
+  Zackmann08 described the bot as changing "only those params it can directly
+  replace".
 
 ## License
 

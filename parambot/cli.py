@@ -43,7 +43,8 @@ def _build_parser():
                           'sandbox), to preview what the bot would do; dry runs only')
     run.add_argument('--report-page', help='default: User:<bot-user>/Report')
     run.add_argument('--run-page', help='default: User:<bot-user>/Run')
-    run.add_argument('--out-dir', default='out', help='where dry runs write diffs and the report')
+    run.add_argument('--out-dir', default='out',
+                     help="where dry runs (and live runs that can't save the report) write files")
 
     sub.add_parser('check-rules', help="check every template's rules against the template")
 
