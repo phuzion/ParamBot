@@ -111,10 +111,10 @@ due to expire, or if `User:ParamBot/Rules/Instructions` is missing.
 ## Writing rules
 
 Rule writers should read
-[`docs/rules-instructions.wiki`](docs/rules-instructions.wiki). It's written
+[`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki). It's written
 for editors rather than programmers, and belongs on the wiki at
 `User:ParamBot/Rules/Instructions`, shown at the top of the rules page. See
-[`examples/rules.wiki`](examples/rules.wiki) for a full rules page.
+[`examples/rules.mediawiki`](examples/rules.mediawiki) for a full rules page.
 
 Each template's rules are an ordinary wikitable, so the rules page reads on the
 wiki as exactly what the bot will do:
@@ -178,8 +178,8 @@ keep the instructions in step with the code.
 With the virtual environment active:
 
 ```bash
-parambot --rules-file examples/rules.wiki check-rules
-parambot --rules-file examples/rules.wiki run
+parambot --rules-file examples/rules.mediawiki check-rules
+parambot --rules-file examples/rules.mediawiki run
 parambot run --page "Some article" --template "Infobox person"
 parambot run --page "User:Someone/sandbox" --any-namespace
 parambot scaffold "Infobox settlement"
@@ -249,7 +249,7 @@ missing, or the account is wrong.
      (ask at
      [Requests for page protection](https://en.wikipedia.org/wiki/Wikipedia:Requests_for_page_protection))
    - `User:ParamBot/Rules/Instructions`, a copy of
-     [`docs/rules-instructions.wiki`](docs/rules-instructions.wiki)
+     [`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki)
    - `User:ParamBot/Report`, a placeholder
    - `User:ParamBot/Run`, containing `yes`
 5. Run `parambot check-rules` and fix anything it reports under `SETUP` or
@@ -271,8 +271,8 @@ For a BRFA trial, run by hand first with
 | `parambot/luapattern.py` | Lua patterns, as used in templates, translated to Python regexes. |
 | `parambot/report.py` | The report page. |
 | `parambot/wikitext.py` | Small wikitext helpers. |
-| `docs/rules-instructions.wiki` | Instructions for rule writers, for the wiki. |
-| `examples/rules.wiki` | An example rules page. |
+| `docs/rules-instructions.mediawiki` | Instructions for rule writers, for the wiki. |
+| `examples/rules.mediawiki` | An example rules page. |
 | `deploy/` | Toolforge job and Pywikibot config template. |
 | `tests/` | The test suite. |
 

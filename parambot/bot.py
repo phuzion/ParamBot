@@ -293,7 +293,7 @@ class ParamBot:
         if not pages[instructions].exists():
             self.report.notes.append(
                 f'{instructions} (the instructions for rule writers) does not exist. Copy '
-                'docs/rules-instructions.wiki there.')
+                'docs/rules-instructions.mediawiki there.')
         return problems
 
     def check_rules(self):

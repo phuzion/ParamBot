@@ -1,6 +1,6 @@
 """Keep the rule writers' instructions honest.
 
-The instructions (docs/rules-instructions.wiki) are the only documentation
+The instructions (docs/rules-instructions.mediawiki) are the only documentation
 most rule writers will read, so their examples must actually work.
 """
 
@@ -11,7 +11,7 @@ import pytest
 
 from parambot.rules import AWB_TEMPLATE, REMOVE, parse_config
 
-DOC = (Path(__file__).parent.parent / 'docs' / 'rules-instructions.wiki').read_text(encoding='utf-8')
+DOC = (Path(__file__).parent.parent / 'docs' / 'rules-instructions.mediawiki').read_text(encoding='utf-8')
 EXAMPLE_RE = re.compile(r'<syntaxhighlight lang="wikitext">\n(.*?)</syntaxhighlight>', re.S)
 EXAMPLES = EXAMPLE_RE.findall(DOC)
 

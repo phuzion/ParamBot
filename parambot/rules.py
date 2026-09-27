@@ -1,6 +1,6 @@
 """Reading the rules page.
 
-The format is documented for rule writers in docs/rules-instructions.wiki,
+The format is documented for rule writers in docs/rules-instructions.mediawiki,
 which is meant to go on the wiki next to the rules page.  The bot reads two
 things from the page and ignores everything else (including anything inside
 comments, <nowiki>, <pre> or <syntaxhighlight>):

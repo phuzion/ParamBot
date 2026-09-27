@@ -1,5 +1,5 @@
 <!-- An example of [[User:ParamBot/Rules]]. The instructions come from
-     docs/rules-instructions.wiki, posted at [[User:ParamBot/Rules/Instructions]]. -->
+     docs/rules-instructions.mediawiki, posted at [[User:ParamBot/Rules/Instructions]]. -->
 {{User:ParamBot/Rules/Instructions}}
 
 == Infobox settlement ==
