@@ -178,7 +178,7 @@ pytest           # tests
 ```
 
 [GitHub Actions](.github/workflows/tests.yml) runs all three on Python 3.11,
-3.12 and 3.13 for every push and every pull request.
+3.12, 3.13 and 3.14 for every push and every pull request.
 
 - **No test touches a real wiki.** They use a fake one from
   [`tests/fakes.py`](tests/fakes.py), which has the same methods as
