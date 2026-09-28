@@ -1,8 +1,9 @@
-"""Reading the rules page.
+"""Reading a rules page.
 
+Each template's rules are on a page of their own (rulespages finds them).
 The format is documented for rule writers in docs/rules-instructions.mediawiki,
-which is meant to go on the wiki next to the rules page.  The bot reads two
-things from the page and ignores everything else (including anything inside
+which is meant to go on the wiki next to the rules pages.  The bot reads two
+things from a page and ignores everything else (including anything inside
 comments, <nowiki>, <pre> or <syntaxhighlight>):
 
 1. Wikitables whose caption names a template::
@@ -29,10 +30,17 @@ comments, <nowiki>, <pre> or <syntaxhighlight>):
 
        {{AWB rename template parameter|Infobox settlement|imagesize|image_size}}
 
+On a template's own rules page every table is for that template, so the
+caption is optional there, and a table or line for any other template is
+ignored.
+
 Rules for the same template are combined, wherever they appear on the page.
+Rows for the same old name must agree: if they give different new names,
+neither is used, and if only some of them say "merge", the bot doesn't merge.
 Anything that can't be used is skipped and described in Config.problems.
 """
 
+import dataclasses
 import re
 from dataclasses import dataclass, field
 
@@ -91,40 +99,69 @@ class Rule:
 class Match:
     rule: Rule
     target: str | None                   # the new name; None for removals
+    # Other rules with "#" that match the same name but would do something
+    # else.  If there are any, the bot shouldn't guess which was meant.
+    others: tuple[Rule, ...] = ()
 
 
 @dataclass
 class RuleSet:
-    """One template's rules, as written on the rules page."""
+    """One template's rules, as written on its rules page."""
 
     template: str
     category: str                        # the category to watch
     category_explicit: bool = False      # a table's caption named the category
     has_table: bool = False              # not only one-line rules
+    page: str = ''                       # the page the rules are on; '' for a local file
+    revision: int | None = None          # the approved revision of that page
+    active: bool = True                  # inactive rules are checked, but never used
     renames: dict[str, Rule] = field(default_factory=dict)   # by old name
     removes: dict[str, Rule] = field(default_factory=dict)   # by name
     patterns: list[Rule] = field(default_factory=list)       # names with "#", in order
+    ignored: set[str] = field(default_factory=set)           # old names whose rows disagree
+    merge_disputed: set[str] = field(default_factory=set)    # rows disagree about merging
 
     def lookup(self, name: str) -> Match | None:
         """The rule for a parameter name, if there is one.  Exact names win
-        over names with "#"."""
+        over names with "#".  If several names with "#" match and disagree,
+        the others are listed in the match."""
         rule = self.renames.get(name)
         if rule is not None:
             return Match(rule, rule.new)
         rule = self.removes.get(name)
         if rule is not None:
             return Match(rule, None)
-        for rule in self.patterns:
-            assert rule.pattern is not None
-            if not rule.pattern.fullmatch(name):
-                continue
-            if rule.kind == REMOVE:
-                return Match(rule, None)
-            assert rule.replacement is not None
-            target = rule.pattern.sub(name, rule.replacement)
-            if target != name:
-                return Match(rule, target)
-        return None
+        matches = [m for m in (_pattern_match(rule, name) for rule in self.patterns)
+                   if m is not None]
+        if not matches:
+            return None
+        first = matches[0]
+        others = tuple(m.rule for m in matches[1:] if m.target != first.target)
+        return Match(first.rule, first.target, others)
+
+    def written(self, old: str) -> Rule | None:
+        """The rule for an old name exactly as written: "termstart#", not
+        "termstart2"."""
+        if NUMBER in old:
+            return next((rule for rule in self.patterns if rule.old == old), None)
+        return self.renames.get(old) or self.removes.get(old)
+
+    def put(self, rule: Rule) -> None:
+        """Add a rule, or replace the one for the same old name where it stands."""
+        if rule.pattern is None:
+            (self.removes if rule.kind == REMOVE else self.renames)[rule.old] = rule
+            return
+        for index, existing in enumerate(self.patterns):
+            if existing.old == rule.old:
+                self.patterns[index] = rule
+                return
+        self.patterns.append(rule)
+
+    def discard(self, old: str) -> None:
+        """Drop the rule for an old name as written."""
+        self.renames.pop(old, None)
+        self.removes.pop(old, None)
+        self.patterns = [rule for rule in self.patterns if rule.old != old]
 
     @property
     def rules(self) -> list[Rule]:
@@ -134,20 +171,37 @@ class RuleSet:
         return len(self.renames) + len(self.removes) + len(self.patterns)
 
 
+def _pattern_match(rule: Rule, name: str) -> Match | None:
+    """What a rule with "#" does to name, if it applies to it."""
+    assert rule.pattern is not None
+    if not rule.pattern.fullmatch(name):
+        return None
+    if rule.kind == REMOVE:
+        return Match(rule, None)
+    assert rule.replacement is not None
+    target = rule.pattern.sub(name, rule.replacement)
+    return Match(rule, target) if target != name else None
+
+
 @dataclass
 class Config:
     rulesets: dict[str, RuleSet] = field(default_factory=dict)   # by template name
     problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
-def parse_config(text: str) -> Config:
+def parse_config(text: str, template: str | None = None) -> Config:
+    """The rules in text.  template is set when text is a template's own
+    rules page: every table there is for that template, and rules for any
+    other template are reported and ignored."""
     config = Config()
+    page_template = normalize_template_name(template) if template else None
     code = mwparserfromhell.parse(text)
     for table in tables_in(code):
-        _read_table(table, config)
-    for template in code.filter_templates():
-        if normalize_template_name(template.name) == AWB_TEMPLATE:
-            _read_one_line_rule(template, config)
+        _read_table(table, config, page_template)
+    for call in code.filter_templates():
+        if normalize_template_name(call.name) == AWB_TEMPLATE:
+            _read_one_line_rule(call, config, page_template)
     for ruleset in config.rulesets.values():
         _resolve_chains(ruleset, config.problems)
     return config
@@ -173,39 +227,76 @@ def _ruleset_for(config: Config, template: str, category: str | None = None) -> 
 
 # -- tables ----------------------------------------------------------------
 
-def _read_table(table: Table, config: Config) -> None:
+def _read_table(table: Table, config: Config, page_template: str | None) -> None:
     data = [row for row in table.rows if not _is_header(row)]
-    if table.caption is None:
-        # Only complain about tables that look like rules.
-        if any(_has_para(row.column(0)) for row in data):
-            config.problems.append(msg.table_without_caption(table.tag))
+    target = _table_target(table, data, page_template, config.problems)
+    if target is None:
         return
-    names, category = _caption_target(table.caption)
-    if not names:
-        config.problems.append(msg.caption_without_template(table.caption))
-        return
-    if len(set(names)) > 1:
-        config.problems.append(msg.caption_with_several_templates(names))
-    ruleset = _ruleset_for(config, names[0], category)
+    template, category = target
+    ruleset = _ruleset_for(config, template, category)
     ruleset.has_table = True
     conflict_column = _conflict_column(table)
     for row in data:
         _read_row(row, ruleset, conflict_column, config.problems)
 
 
-def _caption_target(caption: Wikicode) -> tuple[list[str], str | None]:
-    """The templates a caption names, and the category it links to, if any."""
+def _table_target(table: Table, data: list[Row], page_template: str | None,
+                  problems: list[str]) -> tuple[str, str | None] | None:
+    """The template a table is for, and the category its caption links to,
+    if any.  None if the table isn't rules, or can't be used."""
+    looks_like_rules = any(_has_para(row.column(0)) for row in data)
+    if table.caption is None:
+        if page_template is not None and looks_like_rules:
+            return page_template, None
+        if looks_like_rules:
+            # Only complain about tables that look like rules.
+            problems.append(msg.table_without_caption(table.tag))
+        return None
+    links, text, category = _read_caption(table.caption)
+    if page_template is not None:
+        return _page_table_target(page_template, links, text, category, looks_like_rules,
+                                  problems)
+    names = links or ([text] if text else [])
+    if not names:
+        problems.append(msg.caption_without_template(table.caption))
+        return None
+    if len(set(names)) > 1:
+        problems.append(msg.caption_with_several_templates(names))
+    return names[0], category
+
+
+def _page_table_target(page_template: str, links: list[str], text: str, category: str | None,
+                       looks_like_rules: bool, problems: list[str]
+                       ) -> tuple[str, str | None] | None:
+    """On a template's own rules page, every table is for that template.  A
+    table counts as rules if its caption names the template or a category,
+    or if it holds {{para}} names.  One whose caption links to another
+    template is reported and ignored."""
+    if links:
+        if links[0] != page_template:
+            problems.append(msg.table_for_another_template(page_template, links[0]))
+            return None
+        if len(set(links)) > 1:
+            problems.append(msg.caption_with_several_templates(links))
+        return page_template, category
+    if text == page_template or category or looks_like_rules:
+        return page_template, category
+    return None
+
+
+def _read_caption(caption: Wikicode) -> tuple[list[str], str, str | None]:
+    """What a caption names: the templates it links to (with {{tl|...}} and
+    the like), its plain text (for a caption that names a template without
+    a link), and the category it links to, if any."""
     category = None
     for link in caption.filter_wikilinks():
         title = _link_title(link)
         if re.match(r'category\s*:', title, re.IGNORECASE):
             category = title
             caption.remove(link)
-    names = _template_links(caption)
-    if not names:
-        text = ' '.join(caption.strip_code().split()).lstrip('+').strip()
-        names = [text] if text else []
-    return [normalize_template_name(name) for name in names if name], category
+    links = [normalize_template_name(name) for name in _template_links(caption) if name]
+    text = ' '.join(caption.strip_code().split()).lstrip('+').strip()
+    return links, normalize_template_name(text), category
 
 
 def _template_links(caption: Wikicode) -> list[str]:
@@ -304,13 +395,17 @@ def _is_remove(cell: Tag | None) -> bool:
 
 # -- one-line rules --------------------------------------------------------
 
-def _read_one_line_rule(template: Template, config: Config) -> None:
-    values = [strip_comments(p.value).strip() for p in template.params if not p.showkey]
+def _read_one_line_rule(call: Template, config: Config, page_template: str | None) -> None:
+    values = [strip_comments(p.value).strip() for p in call.params if not p.showkey]
     if len(values) != 3 or not values[0] or not _plain(values[1]) or not _plain(values[2]):
-        config.problems.append(msg.malformed_one_line_rule(template))
+        config.problems.append(msg.malformed_one_line_rule(call))
         return
     name, old, new = values
-    _add_rule(_ruleset_for(config, name), old, new, SKIP, config.problems)
+    template = normalize_template_name(name)
+    if page_template is not None and template != page_template:
+        config.problems.append(msg.line_for_another_template(page_template, template))
+        return
+    _add_rule(_ruleset_for(config, template), old, new, SKIP, config.problems)
 
 
 # -- rules -----------------------------------------------------------------
@@ -322,18 +417,28 @@ def _plain(text: str) -> bool:
 
 def _add_rule(ruleset: RuleSet, old: str, new: str | None, conflict: str,
               problems: list[str]) -> None:
-    """Add the rule old → new (new is None for "remove"), unless it's broken."""
+    """Add the rule old → new (new is None for "remove"), unless it's broken
+    or another row for old disagrees with it."""
     problem = _rule_problem(ruleset.template, old, new)
     if problem:
         problems.append(problem)
-    elif old == new:
-        pass
-    elif NUMBER in old:
-        _add_numbered(ruleset, old, new, conflict, problems)
-    elif new is None:
-        _add_removal(ruleset, old, problems)
-    else:
-        _add_rename(ruleset, old, new, conflict, problems)
+        return
+    if old == new or old in ruleset.ignored:
+        return
+    existing = ruleset.written(old)
+    if existing is None:
+        ruleset.put(_new_rule(old, new, conflict))
+    elif existing.new != new:
+        # The rows disagree about what old becomes, so don't guess.
+        ruleset.discard(old)
+        ruleset.ignored.add(old)
+        problems.append(msg.rows_disagree(ruleset.template, old, existing.new, new))
+    elif existing.kind == RENAME and existing.conflict != conflict:
+        # Only some of the rows say merge.  Not merging is the safe choice.
+        if old not in ruleset.merge_disputed:
+            ruleset.merge_disputed.add(old)
+            problems.append(msg.merge_disputed(ruleset.template, old))
+        ruleset.put(dataclasses.replace(existing, conflict=SKIP))
 
 
 def _rule_problem(template: str, old: str, new: str | None) -> str | None:
@@ -352,37 +457,15 @@ def _rule_problem(template: str, old: str, new: str | None) -> str | None:
     return None
 
 
-def _add_removal(ruleset: RuleSet, old: str, problems: list[str]) -> None:
-    ruleset.removes[old] = Rule(REMOVE, old)
-    if old in ruleset.renames:
-        problems.append(msg.renamed_and_removed(ruleset.template, old))
-
-
-def _add_rename(ruleset: RuleSet, old: str, new: str, conflict: str,
-                problems: list[str]) -> None:
-    existing = ruleset.renames.get(old)
-    if existing is not None and existing.new != new:
-        problems.append(msg.renamed_twice(ruleset.template, old, existing.new, new))
-    if old in ruleset.removes:
-        problems.append(msg.renamed_and_removed(ruleset.template, old))
-    ruleset.renames[old] = Rule(RENAME, old, new, conflict=conflict)
-
-
-def _add_numbered(ruleset: RuleSet, old: str, new: str | None, conflict: str,
-                  problems: list[str]) -> None:
-    """Add a rule for a name with "#", replacing any earlier one."""
-    for index, existing in enumerate(ruleset.patterns):
-        if existing.old == old:
-            if existing.new != new:
-                problems.append(msg.renamed_twice(ruleset.template, old, existing.new, new))
-            del ruleset.patterns[index]
-            break
+def _new_rule(old: str, new: str | None, conflict: str) -> Rule:
+    """The rule old → new (new is None for "remove")."""
+    if NUMBER not in old:
+        return Rule(REMOVE, old) if new is None else Rule(RENAME, old, new, conflict=conflict)
     pattern = _number_pattern(old)
     if new is None:
-        ruleset.patterns.append(Rule(REMOVE, old, pattern=pattern))
-    else:
-        ruleset.patterns.append(Rule(RENAME, old, new, pattern=pattern,
-                                     replacement=_number_replacement(new), conflict=conflict))
+        return Rule(REMOVE, old, pattern=pattern)
+    return Rule(RENAME, old, new, pattern=pattern, replacement=_number_replacement(new),
+                conflict=conflict)
 
 
 def _number_pattern(old: str) -> LuaPattern:

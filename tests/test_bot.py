@@ -2,14 +2,19 @@
 
 import pytest
 from fakes import (
+    ACTIVE_OFFICEHOLDER,
     ARTICLE_TEXT,
     BOT,
     OFFICEHOLDER_CATEGORY,
+    OFFICEHOLDER_REVISION,
     OFFICEHOLDER_RULES,
+    TEMPLATE_EDITOR,
     FakePage,
     FakeWiki,
     edited_by,
+    link_rule,
     options,
+    rules_page,
     wiki_for,
 )
 
@@ -18,6 +23,12 @@ from parambot.fixer import TemplateRules, fix_wikitext
 from parambot.rules import parse_config
 
 FIXED_TEXT = '{{Infobox officeholder\n| term_start = 2020\n}}'
+PERSON_CATEGORY = 'Category:Pages using infobox person with unknown parameters'
+INACTIVE_OFFICEHOLDER = ('== Active ==\n== Inactive ==\n'
+                         + link_rule('Infobox officeholder', OFFICEHOLDER_REVISION))
+# The officeholder rules with a rename to a name the template doesn't accept.
+MISSPELT_RULES = OFFICEHOLDER_RULES.replace(
+    '|}', '|-\n| {{para|termend}} || {{para|term_ending}}\n|}')
 
 
 def article(title, text=ARTICLE_TEXT, **kwargs):
@@ -32,6 +43,10 @@ def only_report(tmp_path):
 
 def only_diff(tmp_path):
     return next(tmp_path.glob('edits-*.diff')).read_text(encoding='utf-8')
+
+
+def index(opts, text):
+    return {opts.rules_page: FakePage(opts.rules_page, text, protection=TEMPLATE_EDITOR)}
 
 
 # -- dry runs --------------------------------------------------------------
@@ -99,6 +114,54 @@ def test_max_edits(tmp_path):
     assert report.notes[-1] == 'Stopped after 2 edits (--max-edits).'
 
 
+# -- the rules pages -------------------------------------------------------
+
+def test_inactive_rules_are_checked_but_not_used(tmp_path):
+    opts = options(out_dir=str(tmp_path))
+    wiki = wiki_for(opts, **index(opts, INACTIVE_OFFICEHOLDER),
+                    **{f'{opts.rules_page}/Infobox officeholder': rules_page(
+                        opts, 'Infobox officeholder', MISSPELT_RULES, OFFICEHOLDER_REVISION)})
+    wiki.populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    report = ParamBot(wiki, opts).run()
+    assert (report.categories_polled, report.pages_checked, report.edits) == (0, 0, 0)
+    assert only_diff(tmp_path) == ''
+    assert 'Inactive, so checked but not used: Infobox officeholder.' in report.notes
+    # Checked like any other rules.
+    assert any('Check the spelling of "term_ending"' in p for p in report.problems)
+
+
+def test_an_edit_to_a_rules_page_does_nothing_until_approved(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    title = f'{opts.rules_page}/Infobox officeholder'
+    edited = rules_page(opts, 'Infobox officeholder', MISSPELT_RULES, OFFICEHOLDER_REVISION + 1,
+                        history={OFFICEHOLDER_REVISION: OFFICEHOLDER_RULES})
+    wiki = wiki_for(opts, **{title: edited})
+    jane = article('Jane Example')
+    wiki.populate(OFFICEHOLDER_CATEGORY, jane)
+    report = ParamBot(wiki, opts).run()
+    assert jane.saved == [FIXED_TEXT]      # by the approved rules
+    assert report.problems == []           # the misspelt rule isn't read at all
+    [saved] = wiki.page(opts.report_page).saved
+    assert f'{title} has changed since its approved revision ({OFFICEHOLDER_REVISION})' in saved
+
+
+def test_the_summary_links_to_the_index_when_two_rules_pages_were_used(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    person_rules = ('{|\n|+ {{tl|Infobox person}}\n'
+                    '|-\n| {{para|alma_mater}} || {{para|education}}\n|}')
+    person_source = ('{{#invoke:Check for unknown parameters|check'
+                     f'|unknown=[[{PERSON_CATEGORY}|_VALUE_]]| education }}}}')
+    wiki = wiki_for(opts, **index(opts, ACTIVE_OFFICEHOLDER + link_rule('Infobox person', 3001)))
+    wiki.add(rules_page(opts, 'Infobox person', person_rules, 3001),
+             FakePage('Template:Infobox person', person_source))
+    jane = article('Jane Example', ARTICLE_TEXT + '{{Infobox person|alma_mater=X}}')
+    wiki.populate(OFFICEHOLDER_CATEGORY, jane).populate(PERSON_CATEGORY, jane)
+    ParamBot(wiki, opts).run()
+    [summary] = jane.summaries
+    assert 'alma_mater → education' in summary and 'termstart → term_start' in summary
+    assert summary.endswith('([[User:ExampleBot/Rules|rules]])')
+
+
 # -- what stops an edit ----------------------------------------------------
 
 def test_nobots_is_respected(tmp_path):
@@ -159,7 +222,8 @@ def test_live_run_edits_and_saves_the_report(tmp_path):
     assert jane.saved == [FIXED_TEXT]
     assert jane.summaries == [
         'Fixing deprecated parameters restored in [[Template:Infobox officeholder|Infobox '
-        'officeholder]]: termstart → term_start ([[User:ExampleBot/Rules|rules]])']
+        'officeholder]]: termstart → term_start '
+        f'([[Special:Permalink/{OFFICEHOLDER_REVISION}|rules]])']
     report_page = wiki.page(opts.report_page)
     assert len(report_page.saved) == 1
     assert 'made 1 edits' in report_page.saved[0]
@@ -241,17 +305,18 @@ def test_live_run_refuses_to_start_and_lists_every_problem(tmp_path):
 
 def test_dry_run_carries_on_and_reports_setup_problems(tmp_path):
     opts = options(out_dir=str(tmp_path))
-    unprotected = FakePage(opts.rules_page, OFFICEHOLDER_RULES)
-    ParamBot(wiki_for(opts, **{opts.rules_page: unprotected}), opts).run()
-    report = only_report(tmp_path)
-    assert '== Setup problems ==' in report
-    assert 'is not protected' in report
+    unprotected = FakePage(opts.rules_page, ACTIVE_OFFICEHOLDER)
+    report = ParamBot(wiki_for(opts, **{opts.rules_page: unprotected}), opts).run()
+    assert report.edits == 0   # nothing in the category, but the rules were read
+    text = only_report(tmp_path)
+    assert '== Setup problems ==' in text
+    assert 'is not protected' in text
 
 
 # -- failures --------------------------------------------------------------
 
 def test_crash_still_writes_the_report(tmp_path):
-    opts = options(out_dir=str(tmp_path), rules_file=str(tmp_path / 'missing.mediawiki'))
+    opts = options(out_dir=str(tmp_path), rules_files=(str(tmp_path / 'missing.mediawiki'),))
     with pytest.raises(FileNotFoundError):
         ParamBot(wiki_for(opts), opts).run()
     report = only_report(tmp_path)
@@ -280,12 +345,13 @@ def test_live_report_falls_back_to_a_local_file(tmp_path):
     assert 'ConnectionError: API down' in only_report(tmp_path)
 
 
-def test_no_rules_stops_the_run(tmp_path):
+def test_no_rules_is_reported(tmp_path):
     rules = tmp_path / 'rules.mediawiki'
     rules.write_text('Nothing here yet.', encoding='utf-8')
-    opts = options(out_dir=str(tmp_path), rules_file=str(rules))
-    with pytest.raises(StopRun, match='has no rules'):
-        ParamBot(wiki_for(opts), opts).run()
+    opts = options(out_dir=str(tmp_path), rules_files=(str(rules),))
+    report = ParamBot(wiki_for(opts), opts).run()
+    assert report.problems == [f'{rules} has no rules the bot can use.']
+    assert report.edits == 0
 
 
 # -- check-rules -----------------------------------------------------------
@@ -303,6 +369,14 @@ def test_check_rules_reports_a_missing_rules_page():
     report = ParamBot(wiki_for(opts, **{opts.rules_page: None}), opts).check_rules()
     assert f'{opts.rules_page} (the rules page) does not exist. Create it.' in report.setup
     assert f'Rules page {opts.rules_page} does not exist' in report.setup
+
+
+def test_check_rules_checks_inactive_rules():
+    opts = options()
+    wiki = wiki_for(opts, **index(opts, INACTIVE_OFFICEHOLDER))
+    report = ParamBot(wiki, opts).check_rules()
+    assert report.notes == ['Inactive, so checked but not used: Infobox officeholder.']
+    assert wiki.polled == [OFFICEHOLDER_CATEGORY]
 
 
 # -- edit summaries --------------------------------------------------------

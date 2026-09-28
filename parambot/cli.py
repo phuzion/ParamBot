@@ -58,8 +58,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--bot-user', default='ParamBot',
                         help='bot account name; also sets the default rules/report/run pages')
     parser.add_argument('--rules-page', default='', help='default: User:<bot-user>/Rules')
-    parser.add_argument('--rules-file', default='',
-                        help='read rules from a local file instead of the wiki')
+    parser.add_argument('--rules-file', action='append', default=[],
+                        help='read rules from this local file instead of the wiki; repeatable. '
+                             'A directory means every .mediawiki file in it')
     parser.add_argument('-v', '--verbose', action='store_true')
     sub = parser.add_subparsers(dest='command', required=True)
 
@@ -94,7 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _options(args: argparse.Namespace) -> Options:
     common = dict(bot_user=args.bot_user, rules_page=args.rules_page,
-                  rules_file=args.rules_file)
+                  rules_files=tuple(args.rules_file))
     if args.command != 'run':
         return Options(**common)
     return Options(
@@ -162,7 +163,8 @@ def _scaffold(args: argparse.Namespace, wiki: Wiki) -> int:
 
     page = wiki.page(args.template, ns=10)
     text = page.getOldVersion(args.oldid) if args.oldid else page.text
-    table, warnings = scaffold_table(page.title(with_ns=False), text)
+    template = page.title(with_ns=False)
+    table, warnings = scaffold_table(template, text)
     if table is None:
         print(f'{page.title()} has no {{{{#invoke:Check for deprecated parameters}}}} call',
               file=sys.stderr)
@@ -171,7 +173,16 @@ def _scaffold(args: argparse.Namespace, wiki: Wiki) -> int:
         print(f'Could not turn "{warning}" into a row; add rows for it by hand.',
               file=sys.stderr)
     print(table)
+    print(scaffold_next_steps(_options(args), template), file=sys.stderr)
     return 0
+
+
+def scaffold_next_steps(options: Options, template: str) -> str:
+    """Where a scaffolded table goes."""
+    return (f'Put this table on {options.rules_page}/{template}. Then a template editor lists '
+            f'it on {options.rules_page}, under "== Active ==" or "== Inactive ==", as '
+            f'{{{{{options.link_rule_page}|{template}|REVISION}}}}, with the number of the '
+            'revision they approve.')
 
 
 if __name__ == '__main__':

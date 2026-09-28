@@ -7,6 +7,7 @@ them the bot relies on.
 """
 
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import pywikibot
@@ -23,6 +24,7 @@ class WikiPage(Protocol):
 
     text: str
     content_model: str
+    latest_revision_id: int
 
     def title(self, *, with_ns: bool = True) -> str: ...
     def namespace(self) -> Any: ...
@@ -37,6 +39,17 @@ class WikiPage(Protocol):
     def getOldVersion(self, oldid: int) -> str: ...
     def revisions(self, total: int | None = None) -> Iterable[Any]: ...
     def save(self, *, summary: str, minor: bool, bot: bool, quiet: bool) -> None: ...
+
+
+@dataclass(frozen=True)
+class Revision:
+    """One revision of a page."""
+
+    revid: int
+    title: str           # the page it belongs to, as the page is called now
+    text: str | None     # None if the text has been hidden
+    model: str           # the content model, such as "wikitext"
+    latest: int          # the page's newest revision
 
 
 class Wiki:
@@ -74,6 +87,25 @@ class Wiki:
         pages = {title: self.page(title) for title in titles}
         loaded = {p.title(): p for p in self.load(pages.values(), templates=templates)}
         return {title: loaded.get(page.title(), page) for title, page in pages.items()}
+
+    def revisions(self, revids: Iterable[int]) -> dict[int, Revision]:
+        """The given revisions, of any pages, by ID.  Revisions that don't
+        exist, or were deleted with their page, are left out."""
+        revids = list(revids)
+        found: dict[int, Revision] = {}
+        for i in range(0, len(revids), BATCH):
+            data = self.site.simple_request(
+                action='query', prop='revisions|info', rvprop='ids|content',
+                rvslots='main', revids='|'.join(map(str, revids[i:i + BATCH])),
+                formatversion=2).submit()
+            for page in data['query'].get('pages', []):
+                for revision in page.get('revisions', []):
+                    main = revision.get('slots', {}).get('main', {})
+                    found[revision['revid']] = Revision(
+                        revision['revid'], page['title'], main.get('content'),
+                        main.get('contentmodel', page.get('contentmodel', '')),
+                        page['lastrevid'])
+        return found
 
     def expand(self, text: str) -> str:
         """text with its templates expanded, as if it were in an article."""

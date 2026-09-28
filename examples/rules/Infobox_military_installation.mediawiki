@@ -1,0 +1,6 @@
+{| class="wikitable"
+|+ {{tl|Infobox military installation}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|map_type}} || {{para|pushpin_map}} || merge
+|}

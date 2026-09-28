@@ -1,0 +1,54 @@
+Built from the template's deprecated-parameter block.
+
+{| class="wikitable"
+|+ {{tl|Infobox settlement}}
+! Old parameter !! New parameter
+|-
+| {{para|settlement_type}} || {{para|type}}
+|-
+| {{para|image_skyline}} || {{para|image}}
+|-
+| {{para|imagesize}} || {{para|image_size}}
+|-
+| {{para|image_alt}} || {{para|alt}}
+|-
+| {{para|image_caption}} || {{para|caption}}
+|-
+| {{para|mapsize}} || {{para|map_size}}
+|-
+| {{para|mapsize1}} || {{para|map_size1}}
+|-
+| {{para|pushpin_map_alt}} || {{para|pushpin_alt}}
+|-
+| {{para|pushpin_map_caption}} || {{para|pushpin_caption}}
+|-
+| {{para|pushpin_mapsize}} || {{para|pushpin_map_size}}
+|-
+| {{para|blank#_name}} || {{para|custom_label#_sec1}}
+|-
+| {{para|blank#_info}} || {{para|custom_data#_sec1}}
+|-
+| {{para|blank#_name_sec#}} || {{para|custom_label#_sec#}}
+|-
+| {{para|blank#_info_sec#}} || {{para|custom_data#_sec#}}
+|-
+| {{para|timezone}} || {{para|time_zone}}
+|-
+| {{para|timezone_DST}} || {{para|time_zone_DST}}
+|-
+| {{para|timezone_link}} || {{para|time_zone_link}}
+|-
+| {{para|timezone#}} || {{para|time_zone#}}
+|-
+| {{para|timezone#_DST}} || {{para|time_zone#_DST}}
+|-
+| {{para|timezone#_location}} || {{para|time_zone#_location}}
+|-
+| {{para|pushpin_map_caption_notsmall}} || remove
+|-
+| {{para|pushpin_outside}} || remove
+|-
+| {{para|pushpin_overlay}} || remove
+|-
+| {{para|pushpin_image}} || remove
+|}

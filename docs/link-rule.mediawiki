@@ -1,0 +1,23 @@
+<includeonly>{{#if:{{{1|}}}
+|{{#if:{{{2|}}}
+  |'''[[Special:Permalink/{{{2}}}|{{{1}}}]]''' <small>(approved revision {{{2}}})</small>
+  |'''{{{1}}}''' <span class="error">(no approved revision, so ParamBot isn't using these rules)</span>
+  }} – [[User:ParamBot/Rules/{{{1}}}|current page]]{{#if:{{{2|}}}|&#32;· [[Special:Diff/{{{2}}}/cur|changes since approval]]}} · [[Template:{{{1}}}|template]]
+|<span class="error">A <code><nowiki>{{User:ParamBot/LinkRule}}</nowiki></code> is missing the template's name.</span>
+}}</includeonly><noinclude>
+Lists one template's rules page on [[User:ParamBot/Rules]], with the revision of it that a template editor has approved. [[User:ParamBot|ParamBot]] reads the wikitext of [[User:ParamBot/Rules]] and uses exactly that revision of the rules page, never a newer one. This template only changes how the list looks, so editing it can't change what the bot does.
+
+== Usage ==
+Put one on each line under the <code>== Active ==</code> or <code>== Inactive ==</code> heading of [[User:ParamBot/Rules]]:
+<pre>
+* {{User:ParamBot/LinkRule|Infobox station|1234567890}}
+</pre>
+* The first parameter is the template's name, as in the rules page's title: <code>Infobox station</code> for [[User:ParamBot/Rules/Infobox station]].
+* The second is the approved revision. To find it, open the rules page's history and click the date of the version you approve: the number after <code>oldid=</code> in the address is the revision. Or use ''Permanent link'' in the ''Tools'' menu while viewing the page.
+
+To approve newer edits to a rules page, check them with the ''changes since approval'' link, then change the number to the page's latest revision.
+
+== Examples ==
+* {{User:ParamBot/LinkRule|Infobox station|1234567890}}
+* {{User:ParamBot/LinkRule|Infobox station}}
+</noinclude>

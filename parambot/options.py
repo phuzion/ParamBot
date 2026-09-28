@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class Options:
     bot_user: str = 'ParamBot'
     rules_page: str = ''            # default: User:<bot_user>/Rules
-    rules_file: str = ''            # read the rules from this local file instead
+    rules_files: tuple[str, ...] = ()   # read the rules from these local files instead
     report_page: str = ''           # default: User:<bot_user>/Report
     run_page: str = ''              # default: User:<bot_user>/Run
     live: bool = False              # edit for real; otherwise a dry run
@@ -35,6 +35,11 @@ class Options:
         return f'{self.rules_page}/Instructions'
 
     @property
+    def link_rule_page(self) -> str:
+        """The template the rules page lists each rules page with."""
+        return f'User:{self.bot_user}/LinkRule'
+
+    @property
     def rules_source(self) -> str:
         """Where the rules come from, for messages."""
-        return self.rules_file or self.rules_page
+        return ', '.join(self.rules_files) or self.rules_page

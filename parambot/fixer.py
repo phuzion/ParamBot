@@ -143,7 +143,11 @@ class _CallFixer:
         match = self.target.rules.lookup(name)
         if match is None or self.target.still_accepts(name):
             return  # no rule, or the template still accepts it, so nothing is broken
-        if '<!--' in str(param.name):
+        if match.others:
+            # Rules with "#" that disagree about this name: don't guess.
+            rules = [rule.describe() for rule in (match.rule, *match.others)]
+            self._issue(name, None, msg.several_rules_match(rules))
+        elif '<!--' in str(param.name):
             self._issue(name, match.target, msg.name_has_comment())
         elif match.rule.kind == REMOVE:
             self._remove(param, name)

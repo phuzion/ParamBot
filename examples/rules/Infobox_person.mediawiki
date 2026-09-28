@@ -1,0 +1,10 @@
+{| class="wikitable"
+|+ {{tl|Infobox person}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|-
+| {{para|alma mater}} || {{para|education}} || merge
+|-
+| {{para|other_name}} || {{para|other_names}} || merge
+|}

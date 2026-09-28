@@ -1,0 +1,114 @@
+The list as it was drawn up, with a caption added.
+
+{| class='wikitable'
+|+ {{tl|Infobox officeholder}}
+! Deprecate/Remove
+! Replace with
+|-
+|{{para|mainwidth}}
+|{{para|main_width}}
+|-
+|{{para|honorific prefix}}
+|{{para|honorific_prefix}}
+|-
+|{{para|honorific-prefix}}
+|{{para|honorific_prefix}}
+|-
+|{{para|honorific suffix}}
+|{{para|honorific_suffix}}
+|-
+|{{para|honorific-suffix}}
+|{{para|honorific_suffix}}
+|-
+|{{para|width}}
+|{{para|image_size}}
+|-
+|{{para|imagesize}}
+|{{para|image_size}}
+|-
+|{{para|termlabel#}}
+|{{para|term_label#}}
+|-
+|{{para|termend#}}
+|{{para|term_end#}}
+|-
+|{{para|termstart#}}
+|{{para|term_start#}}
+|-
+|{{para|birthname}}
+|{{para|birth_name}}
+|-
+|{{para|death_manner}}
+|{{para|death_cause}}
+|-
+|{{para|restingplace}}
+|{{para|resting_place}}
+|-
+|{{para|restingplacecoordinates}}
+|{{para|resting_place_coordinates}}
+|-
+|{{para|otherparty}}
+|{{para|other_party}}
+|-
+|{{para|spouse(s)}}
+|rowspan=2|{{para|spouse}} (will use {{tl|pluralize from text}})
+|-
+|{{para|spouses}}
+|-
+|{{para|image name}}
+|{{para|image}}
+|-
+|{{para|smallimage}}
+|{{para|image}}
+|-
+|{{para|smallimage_alt}}
+|{{para|alt}}
+|-
+|{{para|majorityleader#}}
+|{{para|majority_leader#}}
+|-
+|{{para|minorityleader#}}
+|{{para|minority_leader#}}
+|-
+|{{para|primeminister#}}
+|{{para|prime_minister#}}
+|-
+|{{para|termlabel#}}
+|{{para|term_label#}}
+|-
+|{{para|termend#}}
+|{{para|term_end#}}
+|-
+|{{para|termstart#}}
+|{{para|term_start#}}
+|-
+|{{para|vicegovernor#}}
+|{{para|vice_governor#}}
+|-
+|{{para|vicepresident#}}
+|{{para|vice_president#}}
+|-
+|{{para|vicepremier#}}
+|{{para|vice_premier#}}
+|-
+|{{para|viceprimeminister#}}
+|{{para|vice_prime_minister#}}
+|-
+|{{para|firstminister#}}
+|{{para|first_minister#}}
+|-
+|{{para|parliamentarygroup#}}
+|{{para|parliamentary_group#}}
+|-
+|{{para|runningmate}}
+|{{para|running_mate}}
+|-
+|{{para|appointed#}}
+|{{para|appointer#}}
+|-
+|{{para|jr/sr and state}}
+|'''''remove'''''
+|-
+|{{para|nationality}}
+|'''''remove'''''
+|}

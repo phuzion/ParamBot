@@ -102,6 +102,28 @@ def test_caption_forms_and_category():
         'Category:Pages with odd station parameters'
 
 
+def test_on_a_rules_page_every_table_is_for_its_template():
+    config = parse_config('''
+{| class="wikitable"
+|+ Agreed at the 2025 RfC
+| {{para|a}} || {{para|b}}
+|}
+{| class="wikitable"
+|+ Infobox person
+| c || d
+|}
+{| class="wikitable"
+| {{para|e}} || {{para|f}}
+|}
+{| class="wikitable"
+|+ Status
+| Done || yes
+|}''', template='infobox_person')
+    assert config.problems == []
+    assert set(config.rulesets) == {'Infobox person'}
+    assert set(config.rulesets['Infobox person'].renames) == {'a', 'c', 'e'}
+
+
 def test_merge_column():
     config = parse_config('''
 {| class="wikitable"
@@ -192,6 +214,105 @@ def test_chains_are_resolved():
     assert rs.renames['b'].new == 'c'
 
 
+# -- rows that overlap -----------------------------------------------------
+
+def test_rows_that_disagree_are_not_used():
+    config = parse_config('''
+{| class="wikitable"
+|+ {{tl|T}}
+|-
+| {{para|a}} || {{para|b}}
+|-
+| {{para|a}} || {{para|c}}
+|-
+| {{para|gone}} || remove
+|-
+| {{para|kept}} || {{para|fine}}
+|-
+| {{para|n#}} || {{para|x#}}
+|}
+{| class="wikitable"
+|+ {{tl|T}}
+|-
+| {{para|a}} || {{para|b}}
+|-
+| {{para|gone}} || {{para|here}}
+|-
+| {{para|n#}} || remove
+|-
+| {{para|kept}} || {{para|fine}}
+|}''')
+    rs = config.rulesets['T']
+    assert [rs.lookup(name) for name in ('a', 'gone', 'n', 'n2')] == [None] * 4
+    assert rs.lookup('kept').target == 'fine'     # the same rule twice is fine
+    assert config.problems == [
+        'T: "a" is renamed to both "b" and "c", so the bot uses neither. Delete the wrong row.',
+        'T: one row renames "gone" to "here" and another removes it, so the bot uses neither. '
+        'Delete the wrong row.',
+        'T: one row renames "n#" to "x#" and another removes it, so the bot uses neither. '
+        'Delete the wrong row.']
+
+
+def test_rows_that_disagree_about_merging_are_not_merged():
+    config = parse_config('''
+{| class="wikitable"
+|+ {{tl|Infobox person}}
+! Old !! New !! If both are set
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|-
+| {{para|other_name}} || {{para|other_names}} || merge
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|}
+{| class="wikitable"
+|+ {{tl|Infobox person}}
+|-
+| {{para|alma_mater}} || {{para|education}}
+|}
+* {{AWB rename template parameter|Infobox person|other_name|other_names}}
+* {{AWB rename template parameter|Infobox person|alma_mater|education}}
+''')
+    rs = config.rulesets['Infobox person']
+    assert rs.renames['alma_mater'].conflict == 'skip'
+    assert rs.renames['other_name'].conflict == 'skip'
+    assert rs.renames['alma_mater'].new == 'education'   # still renamed
+    assert config.problems == [
+        'Infobox person: only some of the rows for "alma_mater" say merge, so the bot won\'t '
+        'merge it. Make the rows agree.',
+        'Infobox person: only some of the rows for "other_name" say merge, so the bot won\'t '
+        'merge it. Make the rows agree.']
+
+
+NUMBERED = '''
+{| class="wikitable"
+|+ {{tl|T}}
+|-
+| {{para|image1#}} || {{para|picture#}}
+|-
+| {{para|image#}} || {{para|photo#}}
+|-
+| {{para|image1#}} || {{para|picture#}}
+|-
+| {{para|image12}} || {{para|photo12}}
+|}'''
+
+
+def test_a_repeated_number_rule_keeps_its_place():
+    rs = parse_config(NUMBERED).rulesets['T']
+    assert [r.old for r in rs.patterns] == ['image1#', 'image#']
+
+
+def test_a_name_matched_by_two_number_rules():
+    rs = parse_config(NUMBERED).rulesets['T']
+    match = rs.lookup('image13')
+    assert (match.rule.old, match.target) == ('image1#', 'picture3')
+    assert [r.old for r in match.others] == ['image#']       # which would give photo13
+    assert rs.lookup('image3').others == ()                  # only image# matches
+    assert rs.lookup('image12').target == 'photo12'          # an exact name settles it
+    assert rs.lookup('image12').others == ()
+
+
 def test_problems_for_common_mistakes():
     config = parse_config('''
 {| class="wikitable"
@@ -250,5 +371,5 @@ def test_problems_for_common_mistakes():
     assert len(problems) == 11
     rs = config.rulesets['T']
     assert rs.renames['a'].conflict == 'skip'
-    assert rs.renames['dup'].new == 'two'
+    assert 'dup' not in rs.renames
     assert 'T1' in config.rulesets   # the first template in the caption is used

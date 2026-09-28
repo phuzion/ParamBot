@@ -277,3 +277,21 @@ def test_idempotent(targets):
     once = fix(text, targets)
     twice = fix_wikitext(once.text, targets)
     assert not twice.changed
+
+
+def test_two_number_rules_for_one_name_are_left_for_a_human():
+    rules = parse_config('''
+{| class="wikitable"
+|+ {{tl|T}}
+|-
+| {{para|image1#}} || {{para|picture#}}
+|-
+| {{para|image#}} || {{para|photo#}}
+|}''')
+    targets = [TemplateRules.unchecked(rs) for rs in rules.rulesets.values()]
+    r = fix('{{T|image13=a.jpg|image2=b.jpg}}', targets)
+    assert r.text == '{{T|image13=a.jpg|photo2=b.jpg}}'
+    [issue] = r.issues
+    assert (issue.param, issue.target) == ('image13', None)
+    assert issue.reason.startswith(
+        'more than one "#" rule matches it (image1# → picture#; image# → photo#)')

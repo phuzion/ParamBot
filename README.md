@@ -36,14 +36,19 @@ replacement.
    checks the account has the `bot` right (unless `--trial` is given), checks
    that `User:ParamBot/Run` says `yes`, and checks that all of its pages are
    set up properly (see [Safeguards](#safeguards)).
-2. **Reads the rules** from `User:ParamBot/Rules`.
-3. **Checks every template the rules name.** It loads each template's
-   redirects and its `{{#invoke:Check for unknown parameters|check|...}}`
-   list of accepted parameters, and reports rules that can't work.
+2. **Reads the rules.** `User:ParamBot/Rules` lists one rules page per
+   template, such as `User:ParamBot/Rules/Infobox settlement`, under an
+   *Active* or an *Inactive* heading, with the revision of it that has been
+   approved. It reads exactly those revisions, 50 at a time, and reports any
+   page listed without one.
+3. **Checks every template the rules name,** active or inactive. It loads each
+   template's redirects and its
+   `{{#invoke:Check for unknown parameters|check|...}}` list of accepted
+   parameters, and reports rules that can't work.
 4. **Checks the size of each template's unknown-parameters category,** 50 at
    a time, and skips the empty ones.
-5. **Fixes each article** in the categories that have pages, then saves it,
-   or writes a diff in a dry run.
+5. **Fixes each article** in the categories that have pages, using the active
+   rules only, then saves it, or writes a diff in a dry run.
 6. **Writes the report** to `User:ParamBot/Report`, listing articles that
    need human review, articles it skipped and why, and problems in the rules.
    The report is only saved when its contents change.
@@ -62,6 +67,12 @@ replacement.
   accepted parameters, it switches that template's rules off and says so on
   the report. Without the list, a backwards rule such as
   `image_size → imagesize` would break every page it touched.
+- **No guessing between rules.** Rows that disagree about an old name are
+  both ignored, rows that disagree about `merge` don't merge, and a parameter
+  that two `#` rules would change differently is left for a human. A
+  template whose rules are on two pages, or under two names (a template and
+  its redirect), is reported, and only the page named after the template
+  itself is used.
 - **No cosmetic-only edits.** If the only changes are to empty parameters,
   the page is left alone.
 - **Conflicts go to humans.** If the old and new parameters have different
@@ -85,15 +96,23 @@ stopping.
 | Page | Must be |
 |---|---|
 | `User:ParamBot` | an existing wikitext page that uses `{{bot}}` to name the operator, as bot policy requires |
-| `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher**, with at least one rule |
+| `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher**, listing the rules pages and their approved revisions |
 | `User:ParamBot/Run` | an existing wikitext page, not a redirect, saying `yes` |
 | `User:ParamBot/Report` | an existing wikitext page, not a redirect, that the bot account can edit |
 
-The rules page decides what the bot edits, so anyone able to change it could
-make the bot edit thousands of articles. That's why it must be protected. The
-Run page is left open so any editor can stop the bot. The bot adds a note to
-the report if the Run page is protected, if the rules page's protection is
-due to expire, or if `User:ParamBot/Rules/Instructions` is missing.
+The rules decide what the bot edits, so anyone able to change them could
+make the bot edit thousands of articles. That's why `User:ParamBot/Rules`
+must be protected. The rules pages it lists, such as
+`User:ParamBot/Rules/Infobox settlement`, needn't be: the list gives the
+revision of each that a template editor has approved, and the bot reads
+exactly that revision. An edit to a rules page does nothing until a template
+editor approves the new revision; until then the report notes that the page
+has changed, with a link to the changes.
+
+The Run page is left open so any editor can stop the bot. The bot adds a note
+to the report if the Run page is protected, if the rules page's protection
+is due to expire, or if `User:ParamBot/Rules/Instructions` or
+`User:ParamBot/LinkRule` is missing.
 
 **Stopping and failures**
 
@@ -114,9 +133,42 @@ Rule writers should read
 [`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki). It's written
 for editors rather than programmers, and belongs on the wiki at
 `User:ParamBot/Rules/Instructions`, shown at the top of the rules page. See
-[`examples/rules.mediawiki`](examples/rules.mediawiki) for a full rules page.
+[`examples/rules.mediawiki`](examples/rules.mediawiki) for a full rules page,
+and [`examples/rules/`](examples/rules/) for the pages it lists.
 
-Each template's rules are an ordinary wikitable, so the rules page reads on the
+`User:ParamBot/Rules` lists one page per template, named after the template,
+with the revision of it that has been approved, under one of two headings:
+
+```wikitext
+== Active ==
+* {{User:ParamBot/LinkRule|Infobox settlement|1234567890}}
+* {{User:ParamBot/LinkRule|Infobox officeholder|1234567999}}
+
+== Inactive ==
+* {{User:ParamBot/LinkRule|Infobox organization|1234568000}}
+```
+
+Active rules are used. Inactive rules are read and checked on every run, and
+their problems reported like any others, but they are never used: that's
+where new rules wait until the report is clean, and where a template's rules
+can be paused. Anything elsewhere on the page, such as links to archives, is
+ignored.
+
+**Approving rules.** The bot reads exactly the revision each line gives,
+never a newer one, so changing a template's rules takes two edits: anyone
+edits its rules page, then a template editor checks the changes and puts the
+new revision number on the list. A rules page listed with a plain link, or
+without a number, isn't used; the report gives the line to paste, with the
+page's current revision. Edit summaries link to the approved revision the
+bot used (`Special:Permalink/…`), so anyone can see exactly which rules made
+an edit.
+
+[`User:ParamBot/LinkRule`](docs/link-rule.mediawiki) shows each line as a
+link to the approved version, the current page, the changes since approval
+and the template. The bot reads the list's wikitext, not what LinkRule
+shows, so LinkRule doesn't need protecting.
+
+Each template's rules are an ordinary wikitable, so its page reads on the
 wiki as exactly what the bot will do:
 
 ```wikitext
@@ -134,7 +186,10 @@ wiki as exactly what the bot will do:
 |}
 ```
 
-- **Caption:** names the template. The bot watches
+- **Caption:** names the template. On a template's own rules page, every
+  table is for that template, so the caption is optional there, and a table
+  whose caption names another template is reported and ignored. The bot
+  watches
   `Category:Pages using <template, first letter lowercase> with unknown parameters`,
   unless the caption links to a different category, as some templates need:
   `|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]`.
@@ -146,7 +201,11 @@ wiki as exactly what the bot will do:
   `remove`. An optional column headed *If both are set* can say `merge`;
   other extra columns are notes.
 - **Numbers:** `#` stands for no number or any number, so `termstart#`
-  covers `termstart`, `termstart2`, `termstart12`, and so on.
+  covers `termstart`, `termstart2`, `termstart12`, and so on. An exact name
+  beats a `#` name, so `termstart2` can have a rule of its own.
+- **One rule per old name:** rows for the same old name must agree. If they
+  give different new names, neither is used; if only some say `merge`, the
+  bot doesn't merge. Both are reported.
 - **Notes and spans:** text in a cell besides the `{{para}}` names is a note,
   and `rowspan`/`colspan` work. Existing deprecation tables can be pasted in
   with a caption added.
@@ -155,9 +214,10 @@ wiki as exactly what the bot will do:
   [WP:AWB/RTP](https://en.wikipedia.org/wiki/Wikipedia:AutoWikiBrowser/Rename_template_parameters),
   also work.
 
-The bot won't run unless the rules page is template-editor protected or
-higher. Even so, the safeguards limit what a bad rule can do, because the old
-name has to be one the template rejects and the new name one it accepts.
+The bot won't run unless `User:ParamBot/Rules` is template-editor protected
+or higher, so only template editors can approve rules. Even so, the
+safeguards limit what a bad rule can do, because the old name has to be one
+the template rejects and the new name one it accepts.
 
 ## Setup
 
@@ -185,6 +245,7 @@ pytest           # tests
   `parambot.wiki.Wiki`.
 - **`tests/test_docs.py`** checks every example in the rule-writer
   instructions, so keep the instructions in step with the code.
+  **`tests/test_examples.py`** does the same for `examples/`.
 - **`tests/test_readme.py`** checks that this README's links and file names
   point at files that exist, and that the project layout below lists every
   module.
@@ -194,8 +255,8 @@ pytest           # tests
 With the virtual environment active:
 
 ```bash
-parambot --rules-file examples/rules.mediawiki check-rules
-parambot --rules-file examples/rules.mediawiki run
+parambot --rules-file examples/rules check-rules
+parambot --rules-file examples/rules run
 parambot run --page "Some article" --template "Infobox person"
 parambot run --page "User:Someone/sandbox" --any-namespace
 parambot scaffold "Infobox settlement"
@@ -205,8 +266,8 @@ parambot scaffold "Infobox settlement"
 |---|---|
 | `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.mediawiki` instead of editing. |
 | `run --live` | Edits for real. Needs a bot account and a `user-config.py` (see [Deploying](#deploying-on-toolforge)). |
-| `check-rules` | Checks the bot's own pages, then every rule against its template and category, without looking at any articles. Exits 1 if there are problems. |
-| `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
+| `check-rules` | Checks the bot's own pages, then every rule, active and inactive, against its template and category, without looking at any articles. Exits 1 if there are problems. |
+| `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block, and says which page to put it on. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
 
 Options that apply to every command go before the command name, for example
 `parambot --rules-file x.wiki run`.
@@ -214,8 +275,8 @@ Options that apply to every command go before the command name, for example
 | Option | Default | Meaning |
 |---|---|---|
 | `--bot-user NAME` | `ParamBot` | Account name. Also sets the default rules, report and run pages under `User:NAME/`. |
-| `--rules-page TITLE` | `User:<bot-user>/Rules` | Rules page to read. |
-| `--rules-file PATH` | | Read the rules from a local file instead. |
+| `--rules-page TITLE` | `User:<bot-user>/Rules` | The page listing the rules pages. |
+| `--rules-file PATH` | | Read the rules from a local file instead, as if each file were an active rules page. A directory means every `.mediawiki` file in it. Can be repeated. |
 | `--lang`, `--family` | `en`, `wikipedia` | Wiki to work on. |
 | `-v` | | Verbose logging. |
 
@@ -240,7 +301,8 @@ bot's user page.
 `run` exits with 0 when the run finishes, and 1 when an error stopped it (the
 report is still written). It exits with 2 when it refused to start or was
 switched off: for example the Run page doesn't say `yes`, the rules page is
-missing, or the account is wrong.
+missing, or the account is wrong. A run with no usable rules finishes
+normally, with the reasons on the report.
 
 ## Deploying on Toolforge
 
@@ -261,13 +323,21 @@ missing, or the account is wrong.
 4. Set up the bot's pages. *Edit existing pages* doesn't let the bot create
    pages, so they all have to exist first:
    - `User:ParamBot`, using `{{bot|YourUsername}}`
-   - `User:ParamBot/Rules`, with the rules, and template-editor protected
-     (ask at
-     [Requests for page protection](https://en.wikipedia.org/wiki/Wikipedia:Requests_for_page_protection))
+   - `User:ParamBot/Rules`, listing the rules pages and their approved
+     revisions under `== Active ==` and `== Inactive ==` (like
+     [`examples/rules.mediawiki`](examples/rules.mediawiki))
+   - `User:ParamBot/Rules/<Template name>` for each template, with its rules
+     (like the files in [`examples/rules/`](examples/rules/))
+   - `User:ParamBot/LinkRule`, a copy of
+     [`docs/link-rule.mediawiki`](docs/link-rule.mediawiki)
    - `User:ParamBot/Rules/Instructions`, a copy of
      [`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki)
    - `User:ParamBot/Report`, a placeholder
    - `User:ParamBot/Run`, containing `yes`
+
+   Ask for `User:ParamBot/Rules` to be template-editor protected at
+   [Requests for page protection](https://en.wikipedia.org/wiki/Wikipedia:Requests_for_page_protection).
+   The rules pages themselves don't need protecting.
 5. Run `parambot check-rules` and fix anything it reports under `SETUP` or
    `PROBLEM`.
 6. Run `toolforge jobs load deploy/jobs.yaml`.
@@ -277,12 +347,10 @@ For a BRFA trial, run by hand first with
 
 ## Project layout
 
-| Path | Contents |
-|---|---|
-A run goes `cli` → `bot`, which checks the bot's pages (`botpages`), reads the
-rules (`rules`), checks them against the templates (`prepare`), then applies
-them to each article (`fixer`) and writes the report (`report`). Only `wiki`
-talks to the wiki.
+A run goes `cli` → `bot`, which checks the bot's pages (`botpages`), finds
+and reads the rules pages (`rulespages`, `rules`), checks the rules against
+the templates (`prepare`), then applies the active ones to each article
+(`fixer`) and writes the report (`report`). Only `wiki` talks to the wiki.
 
 | Path | Contents |
 |---|---|
@@ -290,7 +358,8 @@ talks to the wiki.
 | `parambot/options.py` | The settings for a run. |
 | `parambot/bot.py` | A run: pre-flight checks, finding pages in the categories, fixing them, the report. |
 | `parambot/botpages.py` | Checking the bot's own pages (user page, rules, Run and report pages). |
-| `parambot/rules.py` | Reading the rules page into a `RuleSet` per template. |
+| `parambot/rulespages.py` | Reading the list of rules pages, fetching each one's approved revision, and combining their rules. |
+| `parambot/rules.py` | Reading one rules page into a `RuleSet` per template. |
 | `parambot/wikitable.py` | Reading wikitables: captions, header rows, `rowspan` and `colspan`. |
 | `parambot/prepare.py` | Checking each `RuleSet` against its template, giving the `TemplateRules` the fixer applies. |
 | `parambot/fixer.py` | Applying `TemplateRules` to a page's wikitext. |
@@ -301,7 +370,9 @@ talks to the wiki.
 | `parambot/wiki.py` | Everything the bot asks of the wiki, through Pywikibot. |
 | `parambot/wikitext.py` | Small wikitext helpers. |
 | `docs/rules-instructions.mediawiki` | Instructions for rule writers, for the wiki. |
-| `examples/rules.mediawiki` | An example rules page. |
+| `docs/link-rule.mediawiki` | The `User:ParamBot/LinkRule` template, for the wiki. |
+| `examples/rules.mediawiki` | An example of the list of rules pages. |
+| `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job and Pywikibot config template. |
 | `tests/` | The test suite; `tests/fakes.py` is the fake wiki. |
 | `.github/workflows/tests.yml` | The checks GitHub runs on every push and pull request. |
@@ -313,8 +384,9 @@ hasn't edited Wikipedia. The `ParamBot` account and its pages exist as
 placeholders; `parambot check-rules` lists what they still need. Still to
 decide before filing a BRFA:
 
-- **Rules page.** Whether it stays in the bot's userspace or moves to a
-  Wikipedia-space page. Either way it must be template-editor protected.
+- **Rules pages.** Whether they stay in the bot's userspace or move to
+  Wikipedia space. Either way the list of them must be template-editor
+  protected.
 - **Timing.** The cooldown length, and whether the bot should run daily.
 - **Scope.** Whether `remove` and `merge` rules are wanted, or only renames.
   Zackmann08 described the bot as changing "only those params it can directly

@@ -14,7 +14,102 @@ def excerpt(text: object, limit: int = 60) -> str:
     return flat if len(flat) <= limit else flat[:limit - 1] + '…'
 
 
-# -- the rules page --------------------------------------------------------
+def _and(names: list[str]) -> str:
+    """a, b and c."""
+    return names[0] if len(names) == 1 else f'{", ".join(names[:-1])} and {names[-1]}'
+
+
+# -- the rules pages -------------------------------------------------------
+
+def _link_rule(link_rule: str, name: str, revision: object) -> str:
+    """How to list a rules page: {{User:ParamBot/LinkRule|Infobox foo|123}}."""
+    return f'{{{{{link_rule}|{name}|{revision}}}}}'
+
+
+def rules_on_index(index: str, templates: list[str], link_rule: str) -> str:
+    which = f' (for {_and(templates)})' if templates else ''
+    example = templates[0] if templates else 'Infobox example'
+    return (f'{index} has rules written on it{which}, which the bot ignores: it only reads the '
+            'pages listed under "== Active ==" and "== Inactive ==". Move each template\'s rules '
+            f'to a page of its own, such as {index}/{example}, and list that page with '
+            f'{_link_rule(link_rule, example, "REVISION")}.')
+
+
+def index_without_active(index: str) -> str:
+    return f'{index} has no "== Active ==" heading, so no rules are used.'
+
+
+def listed_twice(title: str, index: str) -> str:
+    return (f'{title} is listed under both Active and Inactive on {index}. Treating it as '
+            'inactive; take it off one of them.')
+
+
+def two_revisions(title: str, index: str, revisions: list[str]) -> str:
+    return (f'{index} lists {title} more than once, with different approved revisions '
+            f'({_and(revisions)}), so the bot isn\'t using it. Keep one.')
+
+
+def link_rule_without_template(link_rule: str, call: object) -> str:
+    return (f'A {{{{{link_rule}}}}} on the rules page doesn\'t name a template, so the bot '
+            f'ignored it: {excerpt(call)}')
+
+
+def not_a_revision(title: str, value: str) -> str:
+    return (f'The approved revision given for {title} is "{value}", which isn\'t a revision '
+            "number, so the bot isn't using its rules. Use the number from the page's history, "
+            'such as the 1234567890 in Special:Permalink/1234567890.')
+
+
+def rules_page_missing_from(title: str, index: str) -> str:
+    return f'{title} is listed on {index} but does not exist. Create it, or take it off the list.'
+
+
+def no_approved_revision(title: str, index: str, link_rule: str, current: int) -> str:
+    name = title[len(index) + 1:]
+    return (f'{title} has no approved revision on {index}, so the bot isn\'t using its rules. '
+            f'If its current version is right, list it as {_link_rule(link_rule, name, current)}.')
+
+
+def revision_missing(title: str, revision: int) -> str:
+    return (f"Revision {revision}, the approved revision of {title}, doesn't exist or was "
+            "deleted, so the bot isn't using its rules. Check the number.")
+
+
+def revision_of_another_page(title: str, revision: int, actual: str) -> str:
+    return (f'Revision {revision} is a revision of {actual}, not of {title}, so the bot isn\'t '
+            f'using the {title} rules. Check the number.')
+
+
+def revision_hidden(title: str, revision: int) -> str:
+    return (f'The text of revision {revision} of {title} is hidden, so the bot isn\'t using its '
+            'rules. Approve another revision.')
+
+
+def rules_page_not_wikitext(title: str, model: str) -> str:
+    return f'{title} must be an ordinary wikitext page, not {model}, so the bot ignored it.'
+
+
+def newer_than_approved(title: str, revision: int, latest: int, index: str) -> str:
+    return (f'{title} has changed since its approved revision ({revision}); the bot is still '
+            f'using that one. Review the changes at Special:Diff/{revision}/{latest}, and if '
+            f'they\'re right, change the revision on {index} to {latest}.')
+
+
+def rules_page_empty(title: str, revision: int) -> str:
+    return (f'Revision {revision} of {title} has no rules the bot could read. Approve a revision '
+            'with a table of renames.')
+
+
+def rules_on_two_pages(template: str, first: str, second: str) -> str:
+    return (f'{template} has rules on two pages, {first} and {second}, so the bot ignored both. '
+            'Put all of its rules on one page.')
+
+
+def inactive_rules(templates: list[str]) -> str:
+    return f'Inactive, so checked but not used: {", ".join(templates)}.'
+
+
+# -- tables and rows -------------------------------------------------------
 
 def two_categories(template: str, first: str, second: str) -> str:
     return (f'{template}: two tables give different categories to watch ("{first}" and '
@@ -35,6 +130,16 @@ def caption_without_template(caption: object) -> str:
 def caption_with_several_templates(names: list[str]) -> str:
     return (f'{names[0]}: its caption names more than one template ({", ".join(names)}); '
             f'using "{names[0]}". Use one table per template.')
+
+
+def table_for_another_template(page_template: str, named: str) -> str:
+    return (f'The rules page for {page_template} has a table for {named}, so the bot ignored '
+            "that table. Each template's rules go on a page of their own.")
+
+
+def line_for_another_template(page_template: str, named: str) -> str:
+    return (f'The rules page for {page_template} has a one-line rule for {named}, so the bot '
+            "ignored it. Each template's rules go on a page of their own.")
 
 
 def new_name_without_old(template: str) -> str:
@@ -76,14 +181,17 @@ def too_many_numbers(template: str, old: str) -> str:
     return f'{template}: "{old}" has more than nine "#"s, so the bot ignored it.'
 
 
-def renamed_and_removed(template: str, old: str) -> str:
-    return f'{template}: "{old}" is both renamed and removed. Delete one.'
+def rows_disagree(template: str, old: str, first: str | None, second: str | None) -> str:
+    if first is None or second is None:
+        return (f'{template}: one row renames "{old}" to "{first or second}" and another '
+                'removes it, so the bot uses neither. Delete the wrong row.')
+    return (f'{template}: "{old}" is renamed to both "{first}" and "{second}", so the bot uses '
+            'neither. Delete the wrong row.')
 
 
-def renamed_twice(template: str, old: str, first: str | None, second: str | None) -> str:
-    first, second = first or 'remove', second or 'remove'
-    return (f'{template}: "{old}" is renamed to both "{first}" and "{second}". '
-            f'Using "{second}"; delete the wrong row.')
+def merge_disputed(template: str, old: str) -> str:
+    return (f'{template}: only some of the rows for "{old}" say merge, so the bot won\'t merge '
+            'it. Make the rows agree.')
 
 
 def malformed_one_line_rule(line: object) -> str:
@@ -100,13 +208,24 @@ def rename_loop(template: str, old: str) -> str:
 
 def template_missing(template: str) -> str:
     return (f'Template:{template} does not exist, so its rules are switched off. '
-            "Check the spelling in the table's caption.")
+            'Check the spelling of its name.')
 
 
 def no_parameter_list(template: str) -> str:
     return (f'Template:{template} has no list of accepted parameters the bot can read (a '
             '{{#invoke:Check for unknown parameters|check|...}} call), so its rules are '
             'switched off.')
+
+
+def rules_for_a_redirect(template: str, actual: str, page: str) -> str:
+    where = f' Move them to {page}.' if page else ''
+    return (f'Template:{template} redirects to Template:{actual}, which has rules of its own, '
+            f'so the bot ignored the {template} rules.{where}')
+
+
+def same_template_twice(templates: list[str], actual: str) -> str:
+    return (f'{_and(templates)} are the same template (Template:{actual}), so the bot ignored '
+            f'their rules. Put them on one page, named after {actual}.')
 
 
 def no_category(template: str) -> str:
@@ -167,8 +286,8 @@ def user_page_without_bot_template(title: str) -> str:
 
 
 def rules_page_unprotected(title: str, current: str) -> str:
-    return (f'{title} (the rules page) is {current}. It decides what the bot edits, so it must '
-            'be template-editor protected or higher. Ask at Wikipedia:Requests for page '
+    return (f'{title} (the rules page) is {current}. It says which rules the bot uses, so it '
+            'must be template-editor protected or higher. Ask at Wikipedia:Requests for page '
             'protection.')
 
 
@@ -194,6 +313,11 @@ def report_page_protected(title: str, level: str) -> str:
 def instructions_missing(title: str) -> str:
     return (f'{title} (the instructions for rule writers) does not exist. Copy '
             'docs/rules-instructions.mediawiki there.')
+
+
+def link_rule_missing(title: str) -> str:
+    return (f'{title} (the template that shows the list of rules pages) does not exist. Copy '
+            'docs/link-rule.mediawiki there.')
 
 
 # -- articles --------------------------------------------------------------
@@ -231,6 +355,11 @@ def both_set(old: str, new: str) -> str:
     return f'"{old}" and "{new}" are both set, to different values'
 
 
+def several_rules_match(rules: list[str]) -> str:
+    return (f'more than one "#" rule matches it ({"; ".join(rules)}), so the bot left it alone. '
+            'Delete one of those rows, or add a row for this exact name')
+
+
 def edit_summary(parts: list[str], rules_page: str, limit: int) -> str:
     text = 'Fixing deprecated parameters restored in ' + '; '.join(parts)
     if len(text) > limit:
@@ -261,7 +390,7 @@ def pages_not_ready(problems: list[str]) -> str:
 
 
 def no_rules(source: str) -> str:
-    return f'{source} has no rules, so there is nothing to do'
+    return f'{source} has no rules the bot can use.'
 
 
 def wrong_account(user: str, expected: str) -> str:

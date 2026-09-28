@@ -13,9 +13,10 @@ from . import messages as msg
 from .botpages import check_bot_pages
 from .fixer import FixResult, TemplateRules, fix_wikitext
 from .options import Options
-from .prepare import prepare
+from .prepare import Prepared, prepare
 from .report import Report
-from .rules import Config, parse_config
+from .rules import Config, RuleSet
+from .rulespages import read_rules_files, read_rules_pages
 from .wiki import Wiki, WikiPage
 from .wikitext import normalize_template_name, normalize_title, strip_comments
 
@@ -72,14 +73,11 @@ class ParamBot:
         and category, without looking at any articles."""
         self.report.setup.extend(self._check_pages())
         try:
-            config = self._load_config()
+            rulesets = self._rulesets()
         except StopRun as stop:
             self.report.setup.append(str(stop))
             return self.report
-        if not config.rulesets:
-            self.report.setup.append(f'{self.options.rules_source} has no rules.')
-        self.report.problems.extend(config.problems)
-        prepared = prepare(self.wiki, config.rulesets.values(), self.report)
+        prepared = prepare(self.wiki, rulesets, self.report)
         self._category_sizes(_by_category(prepared.ready), prepared.wrong_category)
         return self.report
 
@@ -99,26 +97,21 @@ class ParamBot:
         self.report.setup.extend(problems)
 
     def _run(self) -> None:
-        config = self._load_config()
-        self.report.problems.extend(config.problems)
-        if not config.rulesets:
-            raise StopRun(msg.no_rules(self.options.rules_source))
-        rulesets = list(config.rulesets.values())
-        if self.options.templates:
-            wanted = {normalize_template_name(t) for t in self.options.templates}
-            rulesets = [ruleset for ruleset in rulesets if ruleset.template in wanted]
-        log.info('%d rule sets, %d rules', len(rulesets), sum(map(len, rulesets)))
+        rulesets = self._rulesets()
+        log.info('%d rule sets (%d inactive), %d rules', len(rulesets),
+                 sum(not ruleset.active for ruleset in rulesets), sum(map(len, rulesets)))
 
-        # Check every rule set on every run, so mistakes reach the report
-        # before an article ever needs the rule.
+        # Check every rule set on every run, inactive ones included, so
+        # mistakes reach the report before an article ever needs the rule.
         prepared = prepare(self.wiki, rulesets, self.report)
+        active = [target for target in prepared.ready if target.rules.active]
         if self.options.pages:
             candidates = {}
             for title in self.options.pages:
                 page = self.wiki.page(title)
-                candidates[page.title()] = Candidate(page, list(prepared.ready))
+                candidates[page.title()] = Candidate(page, list(active))
         else:
-            candidates = self._candidates(prepared.ready, prepared.wrong_category)
+            candidates = self._candidates(active, prepared)
         log.info('%d candidate pages', len(candidates))
         self._process_all(candidates, self.wiki.load(c.page for c in candidates.values()))
 
@@ -145,23 +138,41 @@ class ParamBot:
         self.report.notes.extend(check.notes)
         return check.problems
 
+    def _rulesets(self) -> list[RuleSet]:
+        """The rule sets to check, active and inactive, with the rules pages'
+        problems put on the report."""
+        config = self._load_config()
+        self.report.problems.extend(config.problems)
+        self.report.notes.extend(config.notes)
+        if not config.rulesets:
+            self.report.problems.append(msg.no_rules(self.options.rules_source))
+        rulesets = list(config.rulesets.values())
+        if self.options.templates:
+            wanted = {normalize_template_name(t) for t in self.options.templates}
+            rulesets = [ruleset for ruleset in rulesets if ruleset.template in wanted]
+        inactive = [ruleset.template for ruleset in rulesets if not ruleset.active]
+        if inactive:
+            self.report.notes.append(msg.inactive_rules(inactive))
+        return rulesets
+
     def _load_config(self) -> Config:
-        if self.options.rules_file:
-            with open(self.options.rules_file, encoding='utf-8') as f:
-                return parse_config(f.read())
-        page = self.wiki.page(self.options.rules_page)
-        if not page.exists():
+        if self.options.rules_files:
+            return read_rules_files(self.options.rules_files)
+        index = self.wiki.page(self.options.rules_page)
+        if not index.exists():
             raise StopRun(msg.rules_page_missing(self.options.rules_page))
-        return parse_config(page.text)
+        return read_rules_pages(self.wiki, index, self.options)
 
     # -- finding pages -----------------------------------------------------
 
-    def _candidates(self, targets: list[TemplateRules], explained: set[str]
+    def _candidates(self, active: list[TemplateRules], prepared: Prepared
                     ) -> dict[str, Candidate]:
-        """The pages in each populated category, with the rules for them."""
-        by_category = _by_category(targets)
+        """The pages in each populated category, with the active rules for them."""
+        # Every usable rule set's category is looked up, so a missing one is
+        # noted even for inactive rules, but only active ones are used.
+        sizes = self._category_sizes(_by_category(prepared.ready), prepared.wrong_category)
+        by_category = _by_category(active)
         self.report.categories_polled = len(by_category)
-        sizes = self._category_sizes(by_category, explained)
         candidates: dict[str, Candidate] = {}
         for category, category_targets in by_category.items():
             if not sizes.get(category):
@@ -233,14 +244,23 @@ class ParamBot:
                 log.info('%s: nothing to fix', title)
             return
         reason = self._not_editable(page)
+        summary = edit_summary(result, self._rules_link(result, targets))
         if reason:
             self._skip(title, reason)
         elif self.options.live:
-            self._save(page, result)
+            self._save(page, result, summary)
         else:
-            summary = edit_summary(result, self.options.rules_page)
             self._record_diff(title, page.text, result.text, summary)
             self.report.edits += 1
+
+    def _rules_link(self, result: FixResult, targets: list[TemplateRules]) -> str:
+        """What an edit summary links to: the approved revision of the rules
+        page that made the changes, so readers see exactly the rules used, or
+        the index if they came from more than one page."""
+        used = set(result.templates())
+        revisions = {target.rules.revision for target in targets if target.template in used}
+        revision = revisions.pop() if len(revisions) == 1 else None
+        return f'Special:Permalink/{revision}' if revision else self.options.rules_page
 
     def _not_checkable(self, page: WikiPage) -> str | None:
         """Why the bot won't even look at a page, if it won't."""
@@ -261,12 +281,11 @@ class ParamBot:
             return msg.skip_recently_edited(self.options.bot_user, recent)
         return None
 
-    def _save(self, page: WikiPage, result: FixResult) -> None:
+    def _save(self, page: WikiPage, result: FixResult, summary: str) -> None:
         title = page.title()
         self._check_run_page(before=title)
         page.text = result.text
         try:
-            summary = edit_summary(result, self.options.rules_page)
             page.save(summary=summary, minor=False, bot=True, quiet=True)
         except pwb_exc.EditConflictError:
             self._skip(title, msg.SKIP_EDIT_CONFLICT)

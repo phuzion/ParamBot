@@ -5,27 +5,41 @@
 
   Every <syntaxhighlight> example here is checked by tests/test_docs.py and
   must be valid. Never put an example rules table outside <syntaxhighlight>:
-  on the rules page the bot would obey it.
+  on a rules page the bot would obey it.
 -->
-[[User:ParamBot|ParamBot]] reads this page to find out which template parameters to fix.
+[[User:ParamBot|ParamBot]] reads the pages listed here to find out which template parameters to fix.
 
 When a template stops accepting an old parameter name (for example {{tl|Infobox settlement}} replacing {{para|imagesize}} with {{para|image_size}}), a revert can put the old name back into an article. The infobox then silently drops that information and the article shows up in the template's "unknown parameters" category. Once a day, ParamBot checks those categories and renames the old parameters to the new ones. It changes nothing else.
 
 '''Only add renames that already have consensus.''' Usually that means the template's deprecated-parameter check listed them.
 
-'''This page is template-editor protected''', because it decides what the bot edits, and the bot refuses to run if it isn't. If you can't edit it, suggest your rows on the talk page with {{tlx|edit template-protected}}, and a template editor will add them.
-
-== Adding a template ==
-Each template gets a table, with the old parameter names on the left and the new names on the right.
-
-# Edit this page. At the bottom, add a heading with the template's name.
-# Copy the example table below and paste it under your heading.
-# In the caption line (the one starting <code>|+</code>), change the template's name to yours.
-# Change the rows so that each one holds an old name and its new name. Each row starts with a <code>|-</code> line; add one row per old name.
-# Save.
+== How the rules are organised ==
+Each template's rules are on a page of their own, named after the template: the rules for {{tl|Infobox settlement}} are at [[User:ParamBot/Rules/Infobox settlement]]. This page lists those pages, each with the revision of it that has been approved, under two headings:
+* '''Active:''' the bot uses these rules.
+* '''Inactive:''' the bot checks these rules on every run and reports any problems, but never uses them. Use it for rules that aren't ready yet, or to pause a template's rules.
 
 <syntaxhighlight lang="wikitext">
-== Infobox settlement ==
+== Active ==
+* {{User:ParamBot/LinkRule|Infobox settlement|1234567890}}
+* {{User:ParamBot/LinkRule|Infobox officeholder|1234567999}}
+
+== Inactive ==
+* {{User:ParamBot/LinkRule|Infobox organization|1234568000}}
+</syntaxhighlight>
+
+'''The bot uses exactly the approved revision of each rules page''', never a newer one. The number after the template's name is that revision; [[User:ParamBot/LinkRule]] shows it as a link to the approved version, with a link to any changes made since. Inside Active or Inactive you can group the lines under smaller headings, such as <code>=== Places ===</code>, and add notes after them. Anything else on this page, such as links to archives, is ignored.
+
+'''This page is template-editor protected''', and the bot refuses to run if it isn't, so only template editors can approve rules. The rules pages themselves aren't protected: anyone can edit them, but an edit does nothing until a template editor reviews it and approves the new revision here. If you can't edit this page, ask on its talk page with {{tlx|edit template-protected}}, and a template editor will make the change.
+
+== Adding a template ==
+# Create the page <code>User:ParamBot/Rules/''Template name''</code>, named exactly after the template, without "Template:". For example: [[User:ParamBot/Rules/Infobox settlement]].
+# Copy the example table below onto it. In the caption line (the one starting <code>|+</code>), change the template's name to yours.
+# Change the rows so that each one holds an old name and its new name. Each row starts with a <code>|-</code> line; add one row per old name.
+# Save, then find your edit's revision number: in the page's history, click the date of your edit. The number after <code>oldid=</code> in the address is the revision.
+# On this page, add <code><nowiki>* {{User:ParamBot/LinkRule|Template name|revision}}</nowiki></code> under <code>== Inactive ==</code>.
+# After the bot's next run, look at [[User:ParamBot/Report]]. When it lists no problems for the template, move the line to <code>== Active ==</code>.
+
+<syntaxhighlight lang="wikitext">
 {| class="wikitable"
 |+ {{tl|Infobox settlement}}
 ! Old parameter !! New parameter
@@ -38,15 +52,23 @@ Each template gets a table, with the old parameter names on the left and the new
 |}
 </syntaxhighlight>
 
-On the page, this shows as an ordinary table.
+On the page, this shows as an ordinary table. Every table on a template's rules page is for that template, so if the caption names a template, it must be that one.
 
-'''Already have the list in a table?''' If the renames are already in a wikitable, for example on the template's talk page, paste that table as it is. Then add a caption line straight after the <code>{|</code> line: <code><nowiki>|+ {{tl|Template name}}</nowiki></code>. The first column must hold the old names and the second the new ones. Any other columns are notes, unless one is headed ''If both are set'' ([[#If both parameters are filled in|see below]]).
+'''Already have the list in a table?''' If the renames are already in a wikitable, for example on the template's talk page, paste that table as it is, and add a caption line straight after the <code>{|</code> line: <code><nowiki>|+ {{tl|Template name}}</nowiki></code>. The first column must hold the old names and the second the new ones. Any other columns are notes, unless one is headed ''If both are set'' ([[#If both parameters are filled in|see below]]).
 
 '''Does the template still have a deprecated-parameter block?''' The bot operator can turn it into a table for you. Ask on [[User talk:ParamBot]].
 
-'''Is the template already on this page?''' Add rows to its table instead of starting another one.
+'''Does the template already have a rules page?''' Add rows to its table instead of starting another page, then have the new revision approved ([[#Changing a template's rules|see below]]).
+
+'''Name the page after the template itself, not a redirect to it.''' You don't need rules for redirects: the bot finds them itself. If a template has its own rules page, the bot ignores rules on a page named after one of its redirects.
 
 You don't have to wait until the template drops the old names. A rule does nothing while the template still accepts its old name, and starts working by itself once that name is removed.
+
+== Changing a template's rules ==
+# Edit the template's rules page. The bot keeps using the approved version, and the report notes that the page has changed since.
+# A template editor checks the changes with the ''changes since approval'' link on this page, then changes the revision number here to the rules page's newest revision.
+
+A bad edit to a rules page does nothing, since nobody has approved it. Revert it anyway, so that nobody approves it by mistake.
 
 == Writing rows ==
 * '''Old name on the left, new name on the right.'''
@@ -55,6 +77,8 @@ You don't have to wait until the template drops the old names. A rule does nothi
 * '''Numbered parameters:''' put <code>#</code> where the number goes, in both names. Two numbers work too, as in {{para|blank#_name_sec#}} → {{para|custom_label#_sec#}}.
 * '''Parameters with no replacement:''' write <code>remove</code> in the new-name column. If one of these comes back, the bot deletes it and its value.
 * '''Several old names with the same new name''' can each have a row, share a row (<code><nowiki>{{para|alma_mater}} {{para|alma mater}}</nowiki></code>), or share one new-name cell using <code>rowspan</code>.
+* '''One old name, one new name.''' If two rows for the same old name give different new names, or one renames it and another removes it, the bot uses neither and the report says so. If only some of its rows say <code>merge</code>, the bot doesn't merge.
+* '''An exact name beats a <code>#</code> name,''' so a row for {{para|termstart2}} makes an exception to a row for {{para|termstart#}}. If two <code>#</code> rows match the same parameter and would change it differently, the bot leaves it alone and lists the article under ''Needs human review''.
 * You don't need extra rows for redirects to the template. The bot finds them itself.
 
 <syntaxhighlight lang="wikitext">
@@ -88,19 +112,20 @@ How the <code>#</code> row above works:
 
 == Before you save ==
 Check that:
+* the page is named exactly after the template, and listed on [[User:ParamBot/Rules]] under Active or Inactive, with the revision you want used
 * the table has a caption line, starting <code>|+</code>, straight after the <code>{|</code> line, naming the template
 * the old names are in the first column and the new names in the second
 * each row has one new name, or <code>remove</code>
 * a <code>#</code> is in both names or in neither
-* any example tables you wrote in a discussion on this page are inside <code><nowiki><syntaxhighlight lang="wikitext"> ... </syntaxhighlight></nowiki></code>. '''If they aren't, the bot will obey them.'''
+* any example tables you wrote in a discussion on a rules page are inside <code><nowiki><syntaxhighlight lang="wikitext"> ... </syntaxhighlight></nowiki></code>. '''If they aren't, the bot will obey them.'''
 
 == Checking your rules ==
 After the bot's next daily run, look at [[User:ParamBot/Report]].
-* '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a table with no caption, a rename to a name the template doesn't accept, or a table watching the wrong category. Fix those on this page.
-* A '''Notes''' entry saying the template "still accepts" an old name is normal: nothing is broken yet, so the rule waits. If you meant the row the other way round, swap its two names.
+* '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a rules page listed without a revision, two rows that disagree, a rename to a name the template doesn't accept, or a table watching the wrong category. Fix those on the rules page it names, then approve the new revision.
+* '''Notes''' says which templates are inactive, and which rules pages have changed since their approved revision, with a link to the changes. A note saying the template "still accepts" an old name is normal: nothing is broken yet, so the rule waits. If you meant the row the other way round, swap its two names.
 * '''Needs human review''' lists articles where the old and the new parameter are both filled in with different values. The bot leaves those alone. Fix them by hand.
 
-The bot checks every table on every run, so you don't have to wait for an article to need your rule before finding a mistake.
+The bot checks the approved revision of every rules page, active or inactive, on every run, so you don't have to wait for an article to need your rule before finding a mistake. To have a draft checked before it's used, approve it under Inactive first.
 
 '''Want to see your rules in action?''' Put an infobox that uses the old names in your sandbox, and ask the bot operator on [[User talk:ParamBot]] to preview it. The bot shows what it would change without editing anything. It never edits sandboxes or anything else outside articles.
 
@@ -154,7 +179,7 @@ The bot watches the category "Pages using ''template'' with unknown parameters",
 |}
 </syntaxhighlight>
 
-Keep the colon before "Category". Without it, this page would be added to the category.
+Keep the colon before "Category". Without it, the rules page would be added to the category.
 
 '''You don't need to look the category up yourself.''' On every run the bot checks which category each template really uses. If a table watches the wrong one, the report's ''Rules page problems'' says so and gives the exact link to put in the caption.
 
@@ -163,13 +188,25 @@ Lines in the format of [[WP:AWB/RTP]] also work, and <code>#</code> means a numb
 <syntaxhighlight lang="wikitext">
 * <code>{{AWB rename template parameter|Infobox officeholder|termstart#|term_start#}}</code>
 </syntaxhighlight>
-These lines can't say <code>merge</code> or name a category. The bot watches the standard category for them, unless a table for the same template has a category link in its caption. For a template with an [[#A template with an unusual category|unusual category]], use a table.
+On a template's rules page they must be for that template. These lines can't say <code>merge</code> or name a category. The bot watches the standard category for them, unless a table for the same template has a category link in its caption. For a template with an [[#A template with an unusual category|unusual category]], use a table.
 
 == Common mistakes ==
 {| class="wikitable"
 ! Mistake !! What happens !! Fix
 |-
-| No caption line || The bot ignores the table. If the names are written with <code><nowiki>{{para}}</nowiki></code>, the report says so. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code>{|</code>
+| A rules page that isn't listed here, or is listed outside Active and Inactive || The bot never uses it. || Add <code><nowiki>* {{User:ParamBot/LinkRule|Infobox foo|revision}}</nowiki></code> under <code>== Active ==</code> or <code>== Inactive ==</code>
+|-
+| A rules page listed without a revision number, or with a plain link such as <code><nowiki>[[/Infobox foo]]</nowiki></code> || The bot doesn't use it. The report says so, and gives the page's current revision. || Add the revision you approve
+|-
+| A revision number from another page || The bot doesn't use it, and the report says so. || Copy the number from the rules page's own history
+|-
+| Edits to a rules page since its approved revision || The bot keeps using the approved revision. The report's ''Notes'' say the page has changed. || Check the changes, then change the revision number here
+|-
+| A table for a different template on a rules page || The bot ignores the table, and the report says so. || Move it to that template's own rules page
+|-
+| Two rows for the same old name, with different new names || Neither is used, and the report says so. || Delete the wrong row
+|-
+| No caption line, and names written without <code><nowiki>{{para}}</nowiki></code> || The bot ignores the table. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code>{|</code>
 |-
 | Old and new columns swapped || The rules never do anything, because the template accepts the "old" names. The report's ''Notes'' say so. || Swap the columns
 |-
@@ -189,11 +226,13 @@ These lines can't say <code>merge</code> or name a category. The bot watches the
 |-
 | Wrong capitals, such as <code>Imagesize</code> || Nothing happens. || Copy names exactly from the template
 |-
-| An example table in a discussion on this page, outside <code><nowiki><syntaxhighlight></nowiki></code> || '''The bot obeys it.''' || Put examples inside <code><nowiki><syntaxhighlight lang="wikitext"></nowiki></code>
+| An example table in a discussion on a rules page, outside <code><nowiki><syntaxhighlight></nowiki></code> || '''The bot obeys it.''' || Put examples inside <code><nowiki><syntaxhighlight lang="wikitext"></nowiki></code>
 |}
 
 == If something goes wrong ==
 * '''One bad edit:''' revert it and say what happened on [[User talk:ParamBot]]. The bot won't edit that article again for 30 days.
+* '''A bad rule:''' fix the rules page and approve the fixed revision, or change the approved revision back to an earlier one.
 * '''Keep the bot off one article for good:''' add {{tlx|bots|deny{{=}}ParamBot}} to the article.
+* '''Pause one template's rules:''' move its link on this page from <code>== Active ==</code> to <code>== Inactive ==</code>.
 * '''The bot is misbehaving:''' change [[User:ParamBot/Run]] to <code>no</code>. The bot checks it before every edit, so it stops straight away, even in the middle of a run.
 * '''The report starts with an ''Errors'' section:''' the last run didn't finish. Tell the bot operator.

@@ -3,11 +3,11 @@
 import pytest
 from fakes import FakePage, options, wiki_for
 
-from parambot.botpages import check_bot_pages
+from parambot.botpages import check_bot_pages, protection_expiry, too_weak
 
 OPTS = options()
 RULES, RUN, REPORT = OPTS.rules_page, OPTS.run_page, OPTS.report_page
-INSTRUCTIONS = OPTS.instructions_page
+INSTRUCTIONS, LINK_RULE = OPTS.instructions_page, OPTS.link_rule_page
 
 
 def check(opts=OPTS, **changes):
@@ -18,7 +18,8 @@ def check(opts=OPTS, **changes):
 def test_correctly_set_up_pages_pass():
     result, wiki = check()
     assert (result.problems, result.notes) == ([], [])
-    assert set(wiki.loaded_titles) == {'User:ExampleBot', RULES, RUN, REPORT, INSTRUCTIONS}
+    assert set(wiki.loaded_titles) == {'User:ExampleBot', RULES, RUN, REPORT, INSTRUCTIONS,
+                                       LINK_RULE}
 
 
 @pytest.mark.parametrize('protection, expected', [
@@ -47,8 +48,22 @@ def test_expiring_protection_is_a_note():
     assert 'expires 2026-12-01T00:00:00Z' in result.notes[0]
 
 
+EXPIRY = '2026-12-01T00:00:00Z'
+
+
+@pytest.mark.parametrize('protection, weak, expiry', [
+    ({}, 'not protected', None),
+    ({'edit': ('autoconfirmed', EXPIRY)}, 'semi-protected', EXPIRY),
+    ({'edit': ('sysop', 'infinity')}, None, None),
+    ({'edit': ('templateeditor', EXPIRY)}, None, EXPIRY),
+])
+def test_protection_helpers(protection, weak, expiry):
+    page = FakePage('User:ExampleBot/Rules/T', protection=protection)
+    assert (too_weak(page), protection_expiry(page)) == (weak, expiry)
+
+
 def test_local_rules_file_skips_the_rules_page(tmp_path):
-    result, wiki = check(options(rules_file=str(tmp_path / 'rules.mediawiki')),
+    result, wiki = check(options(rules_files=(str(tmp_path / 'rules.mediawiki'),)),
                          **{RULES: None})
     assert result.problems == []
     assert RULES not in wiki.loaded_titles
@@ -78,10 +93,12 @@ def test_live_run_checks_the_bot_can_edit_the_report():
         'ExampleBot cannot edit User:ExampleBot/Report (the report page). Check its protection.']
 
 
-def test_protected_run_page_and_missing_instructions_are_notes():
+def test_protected_run_page_and_missing_helper_pages_are_notes():
     result, _ = check(**{RUN: FakePage(RUN, 'yes', protection={'edit': ('sysop', 'infinity')}),
-                         INSTRUCTIONS: None})
+                         INSTRUCTIONS: None, LINK_RULE: None})
     assert result.problems == []
     notes = '\n'.join(result.notes)
     assert "most editors can't use it to stop the bot" in notes
     assert 'Instructions (the instructions for rule writers) does not exist' in notes
+    assert f'{LINK_RULE} (the template that shows the list of rules pages) does not exist' \
+        in notes

@@ -43,6 +43,36 @@ def test_a_template_given_as_a_redirect():
     rules = parse_config(table('Infobox politician', ('termstart', 'term_start')))
     prepared, _ = run_prepare(wiki, rules.rulesets['Infobox politician'])
     assert prepared.ready[0].names == {'Infobox politician', 'Infobox officeholder'}
+    assert prepared.redirected == {'Infobox politician': 'Infobox officeholder'}
+
+
+def test_rules_for_a_redirect_give_way_to_the_templates_own():
+    target_page = FakePage(OFFICEHOLDER, OFFICEHOLDER_SOURCE)
+    wiki = FakeWiki(target_page, FakePage('Template:Infobox politician', redirect_to=target_page))
+    config = parse_config(table('Infobox politician', ('termend', 'term_end'))
+                          + table('Infobox officeholder', ('termstart', 'term_start')))
+    own = config.rulesets['Infobox officeholder']
+    own.page = 'User:ExampleBot/Rules/Infobox officeholder'
+    prepared, report = run_prepare(wiki, config.rulesets['Infobox politician'], own)
+    assert [target.template for target in prepared.ready] == ['Infobox officeholder']
+    assert report.problems[-1] == (
+        'Template:Infobox politician redirects to Template:Infobox officeholder, which has rules '
+        'of its own, so the bot ignored the Infobox politician rules. Move them to '
+        'User:ExampleBot/Rules/Infobox officeholder.')
+
+
+def test_rules_for_two_redirects_to_one_template_are_both_dropped():
+    target_page = FakePage(OFFICEHOLDER, OFFICEHOLDER_SOURCE)
+    wiki = FakeWiki(target_page, *(FakePage(f'Template:{name}', redirect_to=target_page)
+                                   for name in ('Infobox politician', 'Infobox senator')))
+    config = parse_config(table('Infobox politician', ('termstart', 'term_start'))
+                          + table('Infobox senator', ('termend', 'term_end')))
+    prepared, report = run_prepare(wiki, *config.rulesets.values())
+    assert prepared.ready == []
+    assert report.problems[-1] == (
+        'Infobox politician and Infobox senator are the same template (Template:Infobox '
+        'officeholder), so the bot ignored their rules. Put them on one page, named after '
+        'Infobox officeholder.')
 
 
 def test_missing_template():
@@ -50,7 +80,7 @@ def test_missing_template():
     assert prepared.ready == []
     assert report.problems == [
         'Template:Infobox officeholder does not exist, so its rules are switched off. '
-        "Check the spelling in the table's caption."]
+        'Check the spelling of its name.']
 
 
 def test_template_without_a_parameter_list_is_switched_off():

@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from parambot.cli import _build_parser, _never_crash_printing, _options, main
+from parambot.cli import _build_parser, _never_crash_printing, _options, main, scaffold_next_steps
 from parambot.options import Options
 
 
@@ -56,9 +56,20 @@ def test_run_options_are_built_in_one_go():
 
 
 def test_check_rules_options():
-    opts = _options(_build_parser().parse_args(['--rules-file', 'r.mediawiki', 'check-rules']))
-    assert opts.rules_file == 'r.mediawiki'
+    args = _build_parser().parse_args(
+        ['--rules-file', 'r.mediawiki', '--rules-file', 'rules/', 'check-rules'])
+    opts = _options(args)
+    assert opts.rules_files == ('r.mediawiki', 'rules/')
+    assert opts.rules_source == 'r.mediawiki, rules/'
     assert not opts.live
+
+
+def test_scaffold_says_where_the_table_goes():
+    assert scaffold_next_steps(Options(bot_user='ExampleBot'), 'Infobox person') == (
+        'Put this table on User:ExampleBot/Rules/Infobox person. Then a template editor lists '
+        'it on User:ExampleBot/Rules, under "== Active ==" or "== Inactive ==", as '
+        '{{User:ExampleBot/LinkRule|Infobox person|REVISION}}, with the number of the revision '
+        'they approve.')
 
 
 @pytest.mark.parametrize('argv', [

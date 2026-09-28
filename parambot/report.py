@@ -36,7 +36,7 @@ def _bullets(items: list[str]) -> list[str]:
 class Report:
     issues: list[tuple[str, Issue]] = field(default_factory=list)  # (page title, issue)
     skipped: list[tuple[str, str]] = field(default_factory=list)   # (page title, reason)
-    problems: list[str] = field(default_factory=list)  # with the rules page or templates
+    problems: list[str] = field(default_factory=list)  # with the rules pages or templates
     notes: list[str] = field(default_factory=list)     # for information
     errors: list[str] = field(default_factory=list)    # the run went wrong
     setup: list[str] = field(default_factory=list)     # bot pages that would stop a live run

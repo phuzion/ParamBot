@@ -8,16 +8,28 @@ import re
 from datetime import UTC, datetime, timedelta
 
 from parambot.options import Options
+from parambot.wiki import Revision
 
 BOT = 'ExampleBot'
+LINK_RULE = f'User:{BOT}/LinkRule'
 OFFICEHOLDER_CATEGORY = 'Category:Pages using infobox officeholder with unknown parameters'
 OFFICEHOLDER_SOURCE = (
     '{{Infobox}}{{#invoke:Check for unknown parameters|check'
     f'|unknown=[[{OFFICEHOLDER_CATEGORY}|_VALUE_]]| name | term_start | term_end }}}}')
 OFFICEHOLDER_RULES = ('{| class="wikitable"\n|+ {{tl|Infobox officeholder}}\n'
                       '|-\n| {{para|termstart}} || {{para|term_start}}\n|}\n')
+OFFICEHOLDER_REVISION = 1001
+
+
+def link_rule(template, revision=''):
+    """How the rules page lists a template's rules page."""
+    return f'* {{{{{LINK_RULE}|{template}|{revision}}}}}\n'
+
+
+ACTIVE_OFFICEHOLDER = '== Active ==\n' + link_rule('Infobox officeholder', OFFICEHOLDER_REVISION)
 ARTICLE_TEXT = '{{Infobox officeholder\n| termstart = 2020\n}}'
 NAMESPACES = {'User': 2, 'User talk': 3, 'Template': 10, 'Category': 14}
+TEMPLATE_EDITOR = {'edit': ('templateeditor', 'infinity')}
 
 
 class FakeRevision:
@@ -30,8 +42,12 @@ class FakePage:
 
     def __init__(self, title, text='', *, exists=True, redirect_to=None, model='wikitext',
                  templates=(), protection=None, editable=True, may_edit=True,
-                 revisions=(), redirects=(), broken=False, save_error=None, on_save=None):
+                 revisions=(), redirects=(), broken=False, save_error=None, on_save=None,
+                 revid=None, history=None):
         self._title, self.text = title, text
+        # The current revision's ID, and older revisions: {revid: text, or
+        # None if hidden}.
+        self.latest_revision_id, self.history = revid, dict(history or {})
         self._exists, self.redirect_to, self.content_model = exists, redirect_to, model
         self._templates = [FakePage(t) for t in templates]
         self._protection = protection or {}
@@ -137,6 +153,19 @@ class FakeWiki:
         self.loaded_titles = list(titles)
         return {title: self.page(title) for title in titles}
 
+    def revisions(self, revids):
+        revids = set(revids)
+        found = {}
+        for page in self.pages.values():
+            if not page._exists:
+                continue
+            versions = {**page.history, page.latest_revision_id: page.text}
+            for revid, text in versions.items():
+                if revid in revids:
+                    found[revid] = Revision(revid, page.title(), text, page.content_model,
+                                            page.latest_revision_id)
+        return found
+
     def expand(self, text):
         self.expanded.append(text)
         if self.expand_error:
@@ -155,13 +184,22 @@ class FakeWiki:
         return [p for p in self.members.get(category, []) if p.namespace() in namespaces]
 
 
+def rules_page(opts, template, text='', revid=None, **kwargs):
+    """A template's rules page, whose current revision is revid."""
+    return FakePage(f'{opts.rules_page}/{template}', text, revid=revid, **kwargs)
+
+
 def bot_pages(options, **changes):
-    """The bot's own pages, set up properly, plus Infobox officeholder rules.
-    changes replaces pages by title; None makes a page missing."""
+    """The bot's own pages, set up properly, with active Infobox officeholder
+    rules.  changes replaces pages by title; None makes a page missing."""
+    officeholder = rules_page(options, 'Infobox officeholder', OFFICEHOLDER_RULES,
+                              OFFICEHOLDER_REVISION)
     pages = {
         options.user_page: FakePage(options.user_page, templates=['Template:Bot']),
-        options.rules_page: FakePage(options.rules_page, OFFICEHOLDER_RULES,
-                                     protection={'edit': ('templateeditor', 'infinity')}),
+        options.rules_page: FakePage(options.rules_page, ACTIVE_OFFICEHOLDER,
+                                     protection=TEMPLATE_EDITOR),
+        options.link_rule_page: FakePage(options.link_rule_page, 'Shows a rules page.'),
+        officeholder.title(): officeholder,
         options.run_page: FakePage(options.run_page, 'yes'),
         options.report_page: FakePage(options.report_page, 'Placeholder.'),
         options.instructions_page: FakePage(options.instructions_page, 'Instructions.'),

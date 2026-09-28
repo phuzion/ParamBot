@@ -5,6 +5,9 @@ template on the wiki: the template must exist and have a list of accepted
 parameters the bot can read, and its table must watch the category the
 template really uses.  Anything wrong goes on the report.  Each usable rule
 set becomes a TemplateRules, which is what the fixer applies.
+
+Inactive rule sets are checked the same way; the caller decides not to use
+them.
 """
 
 import logging
@@ -30,6 +33,8 @@ class Prepared:
     # Templates whose table watches a category the template doesn't use.
     # The report already says so, so an empty category needn't be mentioned.
     wrong_category: set[str] = field(default_factory=set)
+    # Rule sets named after a redirect: {name: the template it redirects to}.
+    redirected: dict[str, str] = field(default_factory=dict)
 
 
 def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared:
@@ -41,6 +46,7 @@ def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared
         target = _prepare_one(wiki, ruleset, loaded.get(page.title(), page), report, prepared)
         if target is not None:
             prepared.ready.append(target)
+    prepared.ready = _one_per_template(prepared.ready, prepared.redirected, report)
     return prepared
 
 
@@ -53,7 +59,9 @@ def _prepare_one(wiki: Wiki, ruleset: RuleSet, page: WikiPage, report: Report,
     names = {template}
     if page.isRedirectPage():
         page = page.getRedirectTarget()
-        names.add(normalize_template_name(page.title(with_ns=False)))
+        actual = normalize_template_name(page.title(with_ns=False))
+        prepared.redirected[template] = actual
+        names.add(actual)
     names |= {normalize_template_name(redirect.title(with_ns=False))
               for redirect in page.redirects(namespaces=[TEMPLATE_NAMESPACE])}
 
@@ -75,6 +83,34 @@ def _prepare_one(wiki: Wiki, ruleset: RuleSet, page: WikiPage, report: Report,
         if rule.new is not None and rule.new not in known:
             report.problems.append(msg.target_not_accepted(template, rule.old, rule.new))
     return TemplateRules(ruleset, frozenset(names), known)
+
+
+def _one_per_template(ready: list[TemplateRules], redirected: dict[str, str],
+                      report: Report) -> list[TemplateRules]:
+    """Rule sets for the same template under different names, such as
+    Infobox town and Infobox settlement, which it redirects to.  Only one set
+    of rules can apply to a call of the template, so don't guess: keep the one
+    named after the template itself, if there is one, and drop the others."""
+    by_template: dict[str, list[TemplateRules]] = {}
+    for target in ready:
+        actual = redirected.get(target.template, target.template)
+        by_template.setdefault(actual, []).append(target)
+    dropped: set[int] = set()
+    for actual, targets in by_template.items():
+        if len(targets) == 1:
+            continue
+        own = next((t for t in targets if t.template == actual), None)
+        if own is None:
+            names = [target.template for target in targets]
+            report.problems.append(msg.same_template_twice(names, actual))
+            dropped |= {id(target) for target in targets}
+            continue
+        for target in targets:
+            if target is not own:
+                report.problems.append(
+                    msg.rules_for_a_redirect(target.template, actual, own.rules.page))
+                dropped.add(id(target))
+    return [target for target in ready if id(target) not in dropped]
 
 
 def template_categories(wiki: Wiki, template: str, known: KnownParams) -> list[str] | None:

@@ -9,12 +9,19 @@ from pathlib import Path
 
 import pytest
 
+from parambot.options import Options
 from parambot.rules import AWB_TEMPLATE, REMOVE, parse_config
+from parambot.rulespages import Listed, read_index
 
 DOC_PATH = Path(__file__).parent.parent / 'docs' / 'rules-instructions.mediawiki'
 DOC = DOC_PATH.read_text(encoding='utf-8')
 EXAMPLE_RE = re.compile(r'<syntaxhighlight lang="wikitext">\n(.*?)</syntaxhighlight>', re.S)
 EXAMPLES = EXAMPLE_RE.findall(DOC)
+# Examples of the list of rules pages, rather than of rules.
+INDEX_EXAMPLES = [example for example in EXAMPLES if '== Active ==' in example]
+RULES_EXAMPLES = [example for example in EXAMPLES if example not in INDEX_EXAMPLES]
+OPTIONS = Options()   # ParamBot's own pages
+INDEX = OPTIONS.rules_page
 
 
 def _section(heading):
@@ -31,23 +38,36 @@ def _examples_in(heading):
 
 
 def test_instructions_contain_no_live_rules():
-    # If the instructions end up on the rules page itself, the bot must not
+    # The instructions are shown on the rules page, so the bot must not
     # obey any of their examples, or complain about the doc's own tables.
     config = parse_config(DOC)
     assert config.rulesets == {}
     assert config.problems == []
+    assert read_index(DOC, OPTIONS).pages == {}
 
 
 def test_there_are_examples():
-    assert len(EXAMPLES) >= 5
+    assert len(RULES_EXAMPLES) >= 5
+    assert len(INDEX_EXAMPLES) == 1
 
 
-@pytest.mark.parametrize('example', EXAMPLES, ids=lambda e: e.splitlines()[0][:40])
+@pytest.mark.parametrize('example', RULES_EXAMPLES, ids=lambda e: e.splitlines()[0][:40])
 def test_examples_are_valid(example):
     config = parse_config(example)
     assert config.problems == []
     assert config.rulesets, 'example defines no rules'
     assert all(len(rs) for rs in config.rulesets.values())
+
+
+def test_index_example():
+    [example] = _examples_in('How the rules are organised')
+    listing = read_index(example, OPTIONS)
+    assert listing.problems == []
+    assert [(page.title, page.active, bool(page.revision)) for page in listing.pages.values()] == [
+        (f'{INDEX}/Infobox settlement', True, True),
+        (f'{INDEX}/Infobox officeholder', True, True),
+        (f'{INDEX}/Infobox organization', False, True)]
+    assert all(isinstance(page, Listed) for page in listing.pages.values())
 
 
 def test_adding_a_template_example():

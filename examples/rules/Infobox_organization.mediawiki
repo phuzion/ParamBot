@@ -1,0 +1,28 @@
+{| class="wikitable"
+|+ {{tl|Infobox organization}}
+! Old parameter !! New parameter
+|-
+| {{para|map_dot_label}} || {{para|pushpin_label}}
+|-
+| {{para|coords}} || {{para|coordinates}}
+|-
+| {{para|membership}} || {{para|num_members}}
+|-
+| {{para|subsid}} || {{para|subsidiaries}}
+|-
+| {{para|focus}} || remove
+|-
+| {{para|foci}} || remove
+|-
+| {{para|purpose}} || remove
+|-
+| {{para|map2}} || remove
+|-
+| {{para|map2_alt}} || remove
+|-
+| {{para|map2_caption}} || remove
+|-
+| {{para|map2_size}} || remove
+|-
+| {{para|map2_upright}} || remove
+|}
