@@ -308,7 +308,7 @@ normally, with the reasons on the report.
 ## Deploying on Toolforge
 
 [`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot once a day with the
-[Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework).
+[Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Running_jobs).
 It uses the `@daily` schedule, as the Toolforge documentation asks, so
 Toolforge chooses the time of day.
 
@@ -388,16 +388,21 @@ the templates (`prepare`), then applies the active ones to each article
 
 The code is complete and tested against the live wiki in dry runs, but the bot
 hasn't edited Wikipedia. The `ParamBot` account and its pages exist as
-placeholders; `parambot check-rules` lists what they still need. Still to
-decide before filing a BRFA:
+placeholders; `parambot check-rules` lists what they still need.
 
-- **Rules pages.** Whether they stay in the bot's userspace or move to
-  Wikipedia space. Either way the list of them must be template-editor
-  protected.
-- **Timing.** The cooldown length, and whether the bot should run daily.
-- **Scope.** Whether `remove` and `merge` rules are wanted, or only renames.
-  Zackmann08 described the bot as changing "only those params it can directly
-  replace".
+Decided:
+
+- **Rules pages.** They stay in the bot's userspace, under
+  `User:ParamBot/Rules`, with the list template-editor protected.
+- **Timing.** The bot runs once a day, or more often if editors ask for it.
+- **Scope.** Renames and `remove` rules are in.
+
+Still to decide before filing a BRFA:
+
+- **Merging.** Whether `merge` rules are wanted. This will be discussed on
+  the wiki.
+- **Cooldown.** How long the bot waits before editing an article again
+  (30 days now).
 
 ## License
 
