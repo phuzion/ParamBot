@@ -1,0 +1,270 @@
+<!--
+  Full documentation for ParamBot. This belongs on the wiki at
+  [[User:ParamBot/Documentation]]. Rule writers' step-by-step instructions are
+  a separate page, [[User:ParamBot/Rules/Instructions]], from
+  docs/rules-instructions.mediawiki.
+
+  Every <syntaxhighlight> example here is checked by tests/test_docs.py.
+-->
+'''ParamBot''' puts back template parameter renames that reverts have undone. When a template stops accepting an old parameter name and an edit brings that name back into an article, ParamBot renames it to the new name. It changes nothing else.
+
+{| class="wikitable"
+|-
+! Operators
+| [[User:Phuzion|Phuzion]], [[User:Zackmann08|Zackmann08]]
+|-
+! Status
+| Not yet approved. It makes no edits except trial edits approved at [[WP:BRFA|Bots/Requests for approval]].
+|-
+! Task
+| Rename deprecated template parameters that have come back into articles
+|-
+! Where it edits
+| Articles (main namespace) only
+|-
+! How often
+| Once a day
+|-
+! How much
+| At most 100 edits a run, at least 10 seconds apart
+|-
+! Rules
+| [[User:ParamBot/Rules]]
+|-
+! Report
+| [[User:ParamBot/Report]]
+|-
+! Emergency stop
+| [[User:ParamBot/Run]]: change it to <code>no</code>
+|-
+! Exclusion compliant
+| Yes: {{tlx|bots|deny{{=}}ParamBot}} and {{tlx|nobots}}
+|-
+! Source code
+| [https://github.com/phuzion/ParamBot github.com/phuzion/ParamBot] (Python, with [[mw:Manual:Pywikibot|Pywikibot]] and mwparserfromhell)
+|-
+! Requested at
+| [[Wikipedia:Bot requests#Bot to regularly check for restored deprecated parameters|Bot requests: Bot to regularly check for restored deprecated parameters]]
+|}
+
+== Why it exists ==
+Many infoboxes have had their parameters tidied up: {{para|imagesize}} became {{para|image_size}}, {{para|termstart}} became {{para|term_start}}, and so on. Once every article has been updated, the template stops accepting the old names.
+
+Old names still come back. The most common way is a revert to an old version of an article, often to remove unsuitable text, which also restores the old infobox. The template then ignores the old parameter, so the information silently disappears from the infobox, and the article is added to the template's hidden "Pages using ''template'' with unknown parameters" category.
+
+ParamBot watches those categories and renames the old parameters again. It doesn't undo anyone's edit, and it only touches parameters the template has already stopped accepting.
+
+== What it does to an article ==
+For each old parameter it finds in a call to a template it has rules for:
+
+{| class="wikitable"
+! The old parameter is… !! …and the new parameter is !! ParamBot
+|-
+| filled in || missing || renames the old parameter to the new name
+|-
+| filled in || there, but empty || moves the value into the new parameter and deletes the old one
+|-
+| filled in || filled in with the same value || deletes the old one
+|-
+| filled in || filled in with a different value || leaves both alone and lists the article for a human to sort out, unless the rule says to merge them
+|-
+| empty || anything || nothing, unless it's editing the article anyway, in which case it tidies these up too
+|}
+
+Rules can also say that an old parameter was dropped with no replacement. The bot then deletes it and its value, which the template was ignoring anyway.
+
+=== An example ===
+With rules renaming {{para|imagesize}} and {{para|termstart#}}, removing {{para|nationality}}, and merging {{para|alma_mater}} into {{para|education}}, this infobox:
+
+<syntaxhighlight lang="wikitext">
+{{Infobox officeholder
+| name        = Jane Example
+| image       = Jane Example.jpg
+| imagesize   = 200px
+| termstart   = 2020
+| termstart2  = 2012
+| term_end2   = 2016
+| nationality = American
+| alma_mater  = Example College
+| education   = Example University
+}}
+</syntaxhighlight>
+
+becomes:
+
+<syntaxhighlight lang="wikitext">
+{{Infobox officeholder
+| name        = Jane Example
+| image       = Jane Example.jpg
+| image_size  = 200px
+| term_start  = 2020
+| term_start2 = 2012
+| term_end2   = 2016
+| education   = Example University<br />Example College
+}}
+</syntaxhighlight>
+
+with the edit summary:
+
+<blockquote>Fixing deprecated parameters restored in [[Template:Infobox officeholder|Infobox officeholder]]: imagesize → image_size, termstart → term_start, termstart2 → term_start2, removed nationality, merged alma_mater into education ([[Special:Permalink/1234567999|rules]])</blockquote>
+
+The ''rules'' link in every summary goes to the exact version of the rules that made the edit.
+
+=== What it never does ===
+* Edit anything but articles. It never edits sandboxes, drafts, talk pages or templates.
+* Change anything but template parameters: it renames them, moves or combines values when the old and new parameters are both there, and deletes parameters the rules say were dropped.
+* Rename to a name the template doesn't accept. A typo in a rule shows up on the report instead of in articles.
+* Touch a parameter the template still accepts. Rules can be written before a template drops the old names, and start working by themselves once it does.
+* Make an edit that only changes empty parameters.
+* Edit an article it edited in the last 30 days. If someone put the old parameter back on purpose, the bot won't fight them; it lists the article instead.
+* Edit an article with {{tlx|bots|deny{{=}}ParamBot}} or {{tlx|nobots}}.
+* Guess. If two rules disagree about a parameter, it uses neither and says so.
+
+It keeps the article's formatting, including lined-up <code>=</code> signs, and ignores anything inside comments, <code><nowiki><nowiki></nowiki></code>, <code><nowiki><pre></nowiki></code> and <code><nowiki><syntaxhighlight></nowiki></code>.
+
+== How a run works ==
+Once a day, ParamBot:
+# '''Checks it's allowed to run.''' [[User:ParamBot/Run]] must say <code>yes</code>, and the bot must be logged in to its own account with the bot flag.
+# '''Checks its own pages.''' [[User:ParamBot]] must name its operators with {{tl|bot}}, [[User:ParamBot/Rules]] must be template-editor protected, and the report page must exist and be editable. If anything is wrong, it doesn't run at all.
+# '''Reads the rules.''' It reads the approved revision of every rules page listed on [[User:ParamBot/Rules]] ([[#The rules|see below]]).
+# '''Checks every template the rules are for.''' It reads the template's list of accepted parameters, from its <code><nowiki>{{#invoke:Check for unknown parameters|check|...}}</nowiki></code> call, and finds its redirects and the category it puts articles with unknown parameters in. A template without that list has its rules switched off, since the bot can't tell which names are safe.
+# '''Looks at those categories''', 50 at a time, and skips the empty ones.
+# '''Fixes each article''' in the categories that have pages. Before each edit, it checks [[User:ParamBot/Run]] again.
+# '''Writes the report''' to [[User:ParamBot/Report]].
+
+It stops early after 100 edits, if [[User:ParamBot/Run]] stops saying <code>yes</code>, or if five articles in a row fail with errors.
+
+== The rules ==
+The bot only knows what the rules tell it. [[User:ParamBot/Rules/Instructions]] explains, step by step, how to write them; this is an overview.
+
+=== Where they are ===
+Each template's rules are on a page of their own, named after the template: [[User:ParamBot/Rules/Infobox settlement]] holds the rules for {{tl|Infobox settlement}}. [[User:ParamBot/Rules]] lists those pages under two headings, each with the revision of it that has been approved:
+
+<syntaxhighlight lang="wikitext">
+== Active ==
+* {{User:ParamBot/LinkRule|Infobox settlement|1234567890}}
+* {{User:ParamBot/LinkRule|Infobox officeholder|1234567999}}
+
+== Inactive ==
+* {{User:ParamBot/LinkRule|Infobox organization|1234568000}}
+</syntaxhighlight>
+
+* '''Active''' rules are used.
+* '''Inactive''' rules are checked on every run, and their problems reported, but never used. New rules wait there until the report is clean, and a template's rules can be paused by moving them there.
+
+[[User:ParamBot/LinkRule]] shows each line with links to the approved version, the current page, the changes since approval and the template.
+
+=== What a rules page looks like ===
+Each rules page holds an ordinary table, with the old names on the left and the new names on the right:
+
+<syntaxhighlight lang="wikitext">
+{| class="wikitable"
+|+ {{tl|Infobox officeholder}}
+! Old parameter !! New parameter !! If both are set
+|-
+| {{para|termstart#}} || {{para|term_start#}} ||
+|-
+| {{para|imagesize}} || {{para|image_size}} ||
+|-
+| {{para|alma_mater}} || {{para|education}} || merge
+|-
+| {{para|nationality}} || remove ||
+|}
+</syntaxhighlight>
+
+* <code>#</code> stands for a number, or no number, so {{para|termstart#}} covers {{para|termstart}}, {{para|termstart2}}, {{para|termstart12}} and so on.
+* <code>remove</code> is for a parameter dropped with no replacement.
+* <code>merge</code>, in an optional ''If both are set'' column, combines the two values instead of leaving the article for a human. It's only for lists, such as schools.
+* A caption linking to a category, such as <code><nowiki>|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]</nowiki></code>, is for the few templates that don't use the usual category. The bot checks which category every template really uses, and the report says if a table has it wrong.
+
+=== Approving rules ===
+The rules decide what the bot edits, so only [[WP:TPE|template editors]] can approve them:
+* [[User:ParamBot/Rules]] is template-editor protected. The bot refuses to run if it isn't.
+* The bot uses exactly the revision of each rules page that the list gives, never a newer one.
+* The rules pages themselves aren't protected. Anyone can edit one, for example to draft rules for a template, but the edit does nothing until a template editor reviews it and puts the new revision number on the list.
+
+Until then, the report notes that the page has changed, with a link to the changes. A bad edit to a rules page therefore can't change what the bot does.
+
+'''Reviewing a change''' means checking that:
+* every rename has consensus, usually because the template's deprecated-parameter check listed it
+* the old names are in the left column and the new names in the right. The report's ''Notes'' list rules whose old name the template still accepts, which catches most rules written backwards
+* the new names are ones the template documents
+* <code>merge</code> is only used for lists, never for dates, numbers, coordinates or map names
+* the report shows no problems for the template, which is easiest to check by approving the new revision under Inactive first
+
+== The report ==
+[[User:ParamBot/Report]] is rewritten on every run that finds something different; if nothing has changed, it isn't saved, so its "Last run" line shows the last run with new findings. Its sections:
+
+{| class="wikitable"
+! Section !! What it lists !! What to do
+|-
+| ''Setup problems'' || Something wrong with the bot's own pages. The bot won't run until it's fixed. || Fix the page it names, or tell the operators.
+|-
+| ''Errors'' || The last run stopped early because of an error. || Tell the operators.
+|-
+| ''Needs human review'' || Articles the bot couldn't fix on its own, mostly because the old and new parameters are both filled in with different values. || Fix them by hand. The bot leaves them alone.
+|-
+| ''Not edited'' || Articles it could have fixed but didn't, and why: edited by the bot in the last 30 days, excluded with {{tl|bots}}, an edit conflict, and so on. || Usually nothing.
+|-
+| ''Rules page problems'' || Anything in the rules the bot couldn't use, and how to fix it. || Fix the rules page it names, then approve the new revision.
+|-
+| ''Notes'' || Things worth knowing: inactive templates, rules pages changed since approval, and rules waiting because the template still accepts the old name. || Usually nothing.
+|}
+
+== Stopping it ==
+* '''Stop the bot at once:''' change [[User:ParamBot/Run]] to <code>no</code>. Anyone can; the page is deliberately unprotected. The bot checks it before every edit, so it stops straight away, even in the middle of a run, and makes no more edits until the page says <code>yes</code> again.
+* '''One bad edit:''' revert it and say what happened on [[User talk:ParamBot]]. The bot won't edit that article again for 30 days.
+* '''Keep it off one article for good:''' add {{tlx|bots|deny{{=}}ParamBot}} to the article.
+* '''Stop one template's rules:''' move its line on [[User:ParamBot/Rules]] from Active to Inactive (template editors), or ask on [[User talk:ParamBot]].
+* '''Anything else:''' contact the operators on [[User talk:ParamBot]].
+
+== Questions ==
+; Why hasn't the bot fixed an article?
+: Look for the article on the report. If it isn't there, the most likely reasons are:
+:* the template still accepts the old name, so nothing is broken yet
+:* the article isn't in the template's unknown-parameters category yet: categories can take a while to update after an edit
+:* the template's rules are inactive, or haven't been approved
+:* the bot hasn't run since the article changed
+
+; Why did the bot edit an article I watch?
+: The article used a parameter name its template no longer accepts, so part of the infobox wasn't showing. The ''rules'' link in the edit summary shows the rule it followed. If the edit was wrong, revert it and say so on [[User talk:ParamBot]].
+
+; Can I see what the bot would do before it does it?
+: Yes. The operators can run it without editing anything, on a page of their choice, such as an infobox in your sandbox, and show you the changes it would make. Ask on [[User talk:ParamBot]].
+
+; Does it handle redirects to a template, and numbered parameters?
+: Yes. It finds a template's redirects itself, so one set of rules covers them all, and <code>#</code> in a rule stands for any number.
+
+; How do I add rules for another template?
+: Follow [[User:ParamBot/Rules/Instructions]]. Anyone can draft the rules page; a template editor approves it.
+
+== Its pages ==
+{| class="wikitable"
+! Page !! What it's for !! Protection
+|-
+| [[User:ParamBot]] || The bot's user page || Not needed
+|-
+| [[User:ParamBot/Documentation]] || This page || Not needed
+|-
+| [[User:ParamBot/Rules]] || The list of rules pages and their approved revisions || '''Template editor''': the bot won't run otherwise
+|-
+| <code>User:ParamBot/Rules/''Template name''</code> || One template's rules || Not needed: only the approved revision is used
+|-
+| [[User:ParamBot/Rules/Instructions]] || How to write rules; shown at the top of the list || Not needed
+|-
+| [[User:ParamBot/LinkRule]] || The template that shows each line of the list || Not needed: the bot doesn't use what it shows
+|-
+| [[User:ParamBot/Report]] || What the bot couldn't do, rewritten each run || Must stay editable by the bot
+|-
+| [[User:ParamBot/Run]] || The emergency stop: <code>yes</code> to run, anything else to stop || '''None''', so anyone can stop the bot
+|-
+| [[User talk:ParamBot]] || Questions and problems || —
+|}
+
+== Technical details ==
+* Written in Python, using [[mw:Manual:Pywikibot|Pywikibot]] to talk to the wiki and [https://github.com/earwig/mwparserfromhell mwparserfromhell] to read wikitext. It runs once a day on [[wikitech:Help:Toolforge|Toolforge]].
+* Edits are marked as bot edits, at least 10 seconds apart, with <code>maxlag=5</code>, so it backs off when the servers are busy. It reads pages, revisions and categories in batches of 50.
+* It identifies itself in its user agent with a link to [[User:ParamBot]].
+* Before a template's rules are used, it reads the template's own <code>Check for unknown parameters</code> call, including patterns such as <code>regexp1</code> and the extra map parameters added by <code>mapframe_args</code> and <code>pushpin_map_args</code>. To work out which category a template uses, it expands the call's <code>unknown=</code> text as MediaWiki would in an article.
+* The bot never edits by default: a run is a dry run, which writes the changes it would make to a file, unless it's started with <code>--live</code>. The operators use dry runs to test new rules and to preview changes to sandboxes.
+* The operators can also turn a template's <code><nowiki>{{#invoke:Check for deprecated parameters|check|...}}</nowiki></code> block, current or from an old revision, into a rules table, ready to paste.

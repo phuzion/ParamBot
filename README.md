@@ -244,7 +244,8 @@ pytest           # tests
   [`tests/fakes.py`](tests/fakes.py), which has the same methods as
   `parambot.wiki.Wiki`.
 - **`tests/test_docs.py`** checks every example in the rule-writer
-  instructions, so keep the instructions in step with the code.
+  instructions, and that the example edit in the bot's documentation is
+  exactly what the bot does, so keep both in step with the code.
   **`tests/test_examples.py`** does the same for `examples/`.
 - **`tests/test_readme.py`** checks that this README's links and file names
   point at files that exist, and that the project layout below lists every
@@ -306,8 +307,10 @@ normally, with the reasons on the report.
 
 ## Deploying on Toolforge
 
-[`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot daily at 04:17 UTC with the
+[`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot once a day with the
 [Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Jobs_framework).
+It uses the `@daily` schedule, as the Toolforge documentation asks, so
+Toolforge chooses the time of day.
 
 1. Check the repository out at `~/parambot`, and create a virtual environment
    at `~/parambot/venv` with the package installed. Build it with the same
@@ -332,6 +335,9 @@ normally, with the reasons on the report.
      [`docs/link-rule.mediawiki`](docs/link-rule.mediawiki)
    - `User:ParamBot/Rules/Instructions`, a copy of
      [`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki)
+   - `User:ParamBot/Documentation`, a copy of
+     [`docs/documentation.mediawiki`](docs/documentation.mediawiki), for
+     anyone wondering what the bot does (optional)
    - `User:ParamBot/Report`, a placeholder
    - `User:ParamBot/Run`, containing `yes`
 
@@ -371,6 +377,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `parambot/wikitext.py` | Small wikitext helpers. |
 | `docs/rules-instructions.mediawiki` | Instructions for rule writers, for the wiki. |
 | `docs/link-rule.mediawiki` | The `User:ParamBot/LinkRule` template, for the wiki. |
+| `docs/documentation.mediawiki` | Full documentation of the bot, for `User:ParamBot/Documentation`. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job and Pywikibot config template. |

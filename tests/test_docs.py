@@ -1,17 +1,25 @@
-"""Keep the rule writers' instructions honest.
+"""Keep the documentation on the wiki honest.
 
 The instructions (docs/rules-instructions.mediawiki) are the only documentation
-most rule writers will read, so their examples must actually work.
+most rule writers will read, and the bot's documentation
+(docs/documentation.mediawiki) shows an edit it makes, so their examples must
+actually work.
 """
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
+import mwparserfromhell
 import pytest
 
+from parambot.bot import edit_summary
+from parambot.fixer import TemplateRules, fix_wikitext
 from parambot.options import Options
 from parambot.rules import AWB_TEMPLATE, REMOVE, parse_config
 from parambot.rulespages import Listed, read_index
+from parambot.templatescan import KnownParams
+from parambot.wikitext import param_name
 
 DOC_PATH = Path(__file__).parent.parent / 'docs' / 'rules-instructions.mediawiki'
 DOC = DOC_PATH.read_text(encoding='utf-8')
@@ -112,3 +120,28 @@ def test_one_line_example():
     assert AWB_TEMPLATE in example
     rs = parse_config(example).rulesets['Infobox officeholder']
     assert rs.lookup('termstart4').target == 'term_start4'
+
+
+# -- the bot's documentation -----------------------------------------------
+
+BOT_DOC = (DOC_PATH.parent / 'documentation.mediawiki').read_text(encoding='utf-8')
+
+
+def test_documentation_contains_no_live_rules():
+    assert parse_config(BOT_DOC).rulesets == {}
+    assert read_index(BOT_DOC, OPTIONS).pages == {}
+
+
+def test_documentation_examples_are_what_the_bot_does():
+    before, after, index, rules = EXAMPLE_RE.findall(BOT_DOC)
+    assert read_index(index, OPTIONS).problems == []
+    config = parse_config(rules)
+    assert config.problems == []
+    # The template accepts the names the example ends up with.
+    [call] = mwparserfromhell.parse(after).filter_templates(recursive=False)
+    known = KnownParams({param_name(param) for param in call.params})
+    target = replace(TemplateRules.unchecked(config.rulesets['Infobox officeholder']), known=known)
+    result = fix_wikitext(before, [target])
+    assert result.text == after
+    summary = re.search(r'<blockquote>(.*?)</blockquote>', BOT_DOC).group(1)
+    assert edit_summary(result, 'Special:Permalink/1234567999') == summary
