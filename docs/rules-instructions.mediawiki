@@ -1,7 +1,8 @@
 <!--
   Instructions for people adding ParamBot rules. This belongs on the wiki at
   [[User:ParamBot/Rules/Instructions]], transcluded at the top of
-  [[User:ParamBot/Rules]] with {{User:ParamBot/Rules/Instructions}}.
+  [[User:ParamBot/Rules]] with {{User:ParamBot/Rules/Instructions}}, inside a
+  collapsed box (see examples/rules.mediawiki).
 
   Every <syntaxhighlight> example here is checked by tests/test_docs.py and
   must be valid. Never put an example rules table outside <syntaxhighlight>:

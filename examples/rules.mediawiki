@@ -4,7 +4,13 @@
      Each template's rules are in examples/rules/, one file per page:
      examples/rules/Infobox_settlement.mediawiki is [[User:ParamBot/Rules/Infobox settlement]].
      The revision numbers are made up. -->
+__NOTOC__
+<div class="mw-collapsible mw-collapsed" style="border:1px solid #a2a9b1; padding:0.4em 1em;">
+'''How to add or change rules''': read this before editing.
+<div class="mw-collapsible-content">
 {{User:ParamBot/Rules/Instructions}}
+</div>
+</div>
 
 == Active ==
 === Places ===

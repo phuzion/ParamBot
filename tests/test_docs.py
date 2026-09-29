@@ -127,9 +127,11 @@ def test_one_line_example():
 BOT_DOC = (DOC_PATH.parent / 'documentation.mediawiki').read_text(encoding='utf-8')
 
 
-def test_documentation_contains_no_live_rules():
-    assert parse_config(BOT_DOC).rulesets == {}
-    assert read_index(BOT_DOC, OPTIONS).pages == {}
+@pytest.mark.parametrize('name', ['documentation.mediawiki', 'faq.mediawiki'])
+def test_documentation_contains_no_live_rules(name):
+    text = (DOC_PATH.parent / name).read_text(encoding='utf-8')
+    assert parse_config(text).rulesets == {}
+    assert read_index(text, OPTIONS).pages == {}
 
 
 def test_documentation_examples_are_what_the_bot_does():
@@ -144,4 +146,4 @@ def test_documentation_examples_are_what_the_bot_does():
     result = fix_wikitext(before, [target])
     assert result.text == after
     summary = re.search(r'<blockquote>(.*?)</blockquote>', BOT_DOC).group(1)
-    assert edit_summary(result, 'Special:Permalink/1234567999') == summary
+    assert edit_summary(result, 'Special:Permalink/1234567999', OPTIONS.faq_page) == summary

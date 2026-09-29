@@ -315,6 +315,11 @@ def instructions_missing(title: str) -> str:
             'docs/rules-instructions.mediawiki there.')
 
 
+def faq_missing(title: str) -> str:
+    return (f'{title} (the FAQ every edit summary links to) does not exist. Copy '
+            'docs/faq.mediawiki there.')
+
+
 def link_rule_missing(title: str) -> str:
     return (f'{title} (the template that shows the list of rules pages) does not exist. Copy '
             'docs/link-rule.mediawiki there.')
@@ -327,6 +332,7 @@ SKIP_REDIRECT = 'page is a redirect'
 SKIP_NOT_ARTICLE = 'not an article; use --any-namespace to preview it in a dry run'
 SKIP_EXCLUDED = 'excluded by {{bots}}/{{nobots}}'
 SKIP_EDIT_CONFLICT = 'edit conflict; will be retried on the next run'
+SKIP_DELETED = 'page was deleted while the bot was working on it'
 SKIP_PROTECTED = 'page is protected'
 
 
@@ -360,11 +366,18 @@ def several_rules_match(rules: list[str]) -> str:
             'Delete one of those rows, or add a row for this exact name')
 
 
-def edit_summary(parts: list[str], rules_page: str, limit: int) -> str:
+def edit_summary(parts: list[str], rules_page: str, faq_page: str, limit: int) -> str:
+    """At most limit characters: what changed, then links to the rules used and
+    the FAQ.  A summary too long to fit is cut between changes, so no link in
+    it is left broken."""
+    links = f' ([[{rules_page}|rules]] · [[{faq_page}|FAQ]])'
     text = 'Fixing deprecated parameters restored in ' + '; '.join(parts)
-    if len(text) > limit:
-        text = text[:limit - 1].rstrip() + '…'
-    return f'{text} ([[{rules_page}|rules]])'
+    room = limit - len(links)
+    if len(text) > room:
+        cut = text[:room - 1]
+        boundary = max(cut.rfind(', '), cut.rfind('; '))
+        text = (cut[:boundary] if boundary > 0 else cut.rstrip()) + '…'
+    return text + links
 
 
 def report_summary(edits: int, needing_review: int) -> str:

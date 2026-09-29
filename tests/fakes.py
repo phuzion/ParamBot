@@ -7,6 +7,8 @@ parts of a Pywikibot Page listed in parambot.wiki.WikiPage.
 import re
 from datetime import UTC, datetime, timedelta
 
+from pywikibot import exceptions as pwb_exc
+
 from parambot.options import Options
 from parambot.wiki import Revision
 
@@ -43,8 +45,11 @@ class FakePage:
     def __init__(self, title, text='', *, exists=True, redirect_to=None, model='wikitext',
                  templates=(), protection=None, editable=True, may_edit=True,
                  revisions=(), redirects=(), broken=False, save_error=None, on_save=None,
-                 revid=None, history=None):
+                 revid=None, history=None, deleted_before_save=False):
         self._title, self.text = title, text
+        # Deleted after the bot loaded it: a save recreates it unless the
+        # wiki is told not to create pages.
+        self._deleted_before_save = deleted_before_save
         # The current revision's ID, and older revisions: {revid: text, or
         # None if hidden}.
         self.latest_revision_id, self.history = revid, dict(history or {})
@@ -94,9 +99,11 @@ class FakePage:
     def revisions(self, total=None):
         return self._revisions[:total]
 
-    def save(self, *, summary, minor, bot, quiet):
+    def save(self, *, summary, minor, bot, quiet, nocreate=False):
         if self._save_error:
             raise self._save_error
+        if self._deleted_before_save and nocreate:
+            raise pwb_exc.NoCreateError(0)   # MediaWiki's "missingtitle"
         self.saved.append(self.text)
         self.summaries.append(summary)
         if self._on_save:
@@ -203,6 +210,7 @@ def bot_pages(options, **changes):
         options.run_page: FakePage(options.run_page, 'yes'),
         options.report_page: FakePage(options.report_page, 'Placeholder.'),
         options.instructions_page: FakePage(options.instructions_page, 'Instructions.'),
+        options.faq_page: FakePage(options.faq_page, 'Questions and answers.'),
         'Template:Infobox officeholder': FakePage('Template:Infobox officeholder',
                                                   OFFICEHOLDER_SOURCE),
     }

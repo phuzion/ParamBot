@@ -35,6 +35,11 @@ class Options:
         return f'{self.rules_page}/Instructions'
 
     @property
+    def faq_page(self) -> str:
+        """The FAQ every edit summary links to."""
+        return f'User:{self.bot_user}/FAQ'
+
+    @property
     def link_rule_page(self) -> str:
         """The template the rules page lists each rules page with."""
         return f'User:{self.bot_user}/LinkRule'

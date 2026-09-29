@@ -40,7 +40,7 @@ class PageCheck:
 
 def check_bot_pages(wiki: Wiki, options: Options) -> PageCheck:
     titles = [options.user_page, options.run_page, options.report_page,
-              options.instructions_page]
+              options.instructions_page, options.faq_page]
     if not options.rules_files:
         titles += [options.rules_page, options.link_rule_page]
     pages = wiki.load_titles(titles, templates=True)
@@ -69,6 +69,8 @@ def check_bot_pages(wiki: Wiki, options: Options) -> PageCheck:
 
     if not pages[options.instructions_page].exists():
         check.notes.append(msg.instructions_missing(options.instructions_page))
+    if not pages[options.faq_page].exists():
+        check.notes.append(msg.faq_missing(options.faq_page))
     return check
 
 

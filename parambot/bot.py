@@ -22,7 +22,7 @@ from .wikitext import normalize_template_name, normalize_title, strip_comments
 
 log = logging.getLogger('parambot')
 
-SUMMARY_LIMIT = 450
+SUMMARY_LIMIT = 500  # characters; MediaWiki cuts longer summaries
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
 MAX_FAILURES_IN_A_ROW = 5
 HISTORY_LIMIT = 50  # revisions to look through for the bot's last edit
@@ -244,7 +244,7 @@ class ParamBot:
                 log.info('%s: nothing to fix', title)
             return
         reason = self._not_editable(page)
-        summary = edit_summary(result, self._rules_link(result, targets))
+        summary = edit_summary(result, self._rules_link(result, targets), self.options.faq_page)
         if reason:
             self._skip(title, reason)
         elif self.options.live:
@@ -286,7 +286,11 @@ class ParamBot:
         self._check_run_page(before=title)
         page.text = result.text
         try:
-            page.save(summary=summary, minor=False, bot=True, quiet=True)
+            # Pywikibot tells the wiki to recreate a page deleted since it was
+            # loaded, unless it's told not to.  The bot must never create one.
+            page.save(summary=summary, minor=False, bot=True, quiet=True, nocreate=True)
+        except pwb_exc.NoCreateError:
+            self._skip(title, msg.SKIP_DELETED)
         except pwb_exc.EditConflictError:
             self._skip(title, msg.SKIP_EDIT_CONFLICT)
         except pwb_exc.LockedPageError:
@@ -353,11 +357,12 @@ class ParamBot:
             return
         page.text = text
         page.save(summary=msg.report_summary(self.report.edits, len(self.report.issues)),
-                  minor=True, bot=True, quiet=True)
+                  minor=True, bot=True, quiet=True, nocreate=True)
 
 
-def edit_summary(result: FixResult, rules_page: str) -> str:
-    """The summary for an edit: each template's changes, then a link to the rules."""
+def edit_summary(result: FixResult, rules_page: str, faq_page: str) -> str:
+    """The summary for an edit: each template's changes, then links to the
+    rules and the FAQ."""
     parts = []
     for template in result.templates():
         descriptions: list[str] = []
@@ -365,7 +370,7 @@ def edit_summary(result: FixResult, rules_page: str) -> str:
             if change.template == template and change.describe() not in descriptions:
                 descriptions.append(change.describe())
         parts.append(f'[[Template:{template}|{template}]]: {", ".join(descriptions)}')
-    return msg.edit_summary(parts, rules_page, SUMMARY_LIMIT)
+    return msg.edit_summary(parts, rules_page, faq_page, SUMMARY_LIMIT)
 
 
 def _by_category(targets: list[TemplateRules]) -> dict[str, list[TemplateRules]]:

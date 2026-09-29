@@ -111,8 +111,8 @@ has changed, with a link to the changes.
 
 The Run page is left open so any editor can stop the bot. The bot adds a note
 to the report if the Run page is protected, if the rules page's protection
-is due to expire, or if `User:ParamBot/Rules/Instructions` or
-`User:ParamBot/LinkRule` is missing.
+is due to expire, or if `User:ParamBot/Rules/Instructions`,
+`User:ParamBot/LinkRule` or `User:ParamBot/FAQ` is missing.
 
 **Stopping and failures**
 
@@ -161,7 +161,8 @@ new revision number on the list. A rules page listed with a plain link, or
 without a number, isn't used; the report gives the line to paste, with the
 page's current revision. Edit summaries link to the approved revision the
 bot used (`Special:Permalink/…`), so anyone can see exactly which rules made
-an edit.
+an edit, and to `User:ParamBot/FAQ`, a short explanation for anyone who finds
+the edit on their watchlist.
 
 [`User:ParamBot/LinkRule`](docs/link-rule.mediawiki) shows each line as a
 link to the approved version, the current page, the changes since approval
@@ -335,6 +336,8 @@ Toolforge chooses the time of day.
      [`docs/link-rule.mediawiki`](docs/link-rule.mediawiki)
    - `User:ParamBot/Rules/Instructions`, a copy of
      [`docs/rules-instructions.mediawiki`](docs/rules-instructions.mediawiki)
+   - `User:ParamBot/FAQ`, a copy of [`docs/faq.mediawiki`](docs/faq.mediawiki);
+     every edit summary links to it
    - `User:ParamBot/Documentation`, a copy of
      [`docs/documentation.mediawiki`](docs/documentation.mediawiki), for
      anyone wondering what the bot does (optional)
@@ -378,6 +381,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `docs/rules-instructions.mediawiki` | Instructions for rule writers, for the wiki. |
 | `docs/link-rule.mediawiki` | The `User:ParamBot/LinkRule` template, for the wiki. |
 | `docs/documentation.mediawiki` | Full documentation of the bot, for `User:ParamBot/Documentation`. |
+| `docs/faq.mediawiki` | A short FAQ, for `User:ParamBot/FAQ`, which every edit summary links to. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job and Pywikibot config template. |

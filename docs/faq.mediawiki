@@ -1,0 +1,34 @@
+<!--
+  A short, plain FAQ for people who find a ParamBot edit on an article they
+  watch. Every ParamBot edit summary links here. This belongs on the wiki at
+  [[User:ParamBot/FAQ]]; the full details are at [[User:ParamBot/Documentation]].
+-->
+'''ParamBot fixes infoboxes that were quietly broken by an old parameter name.'''
+
+== Why did ParamBot edit this article? ==
+Templates such as infoboxes sometimes rename their parameters: for example, {{para|imagesize}} became {{para|image_size}} in {{tl|Infobox settlement}}. Once every article has been updated, the template stops understanding the old name.
+
+Old names can still come back, most often when an article is reverted to an older version. The infobox then silently ignores that parameter, so the information disappears from the article. ParamBot puts the new name back, so the information shows again.
+
+== What did it change? ==
+Only the names of template parameters, as the edit summary lists. It doesn't undo anyone's edit, and it doesn't touch the rest of the article. It only changes a parameter the template no longer accepts, and only to a name the template does accept.
+
+Once in a while it also deletes a parameter that the template dropped with no replacement, or combines an old parameter's value with the new one.
+
+== The edit was wrong. What should I do? ==
+Revert it, and say what happened on [[User talk:ParamBot]]. ParamBot won't edit the same article again for 30 days, so it won't fight you.
+
+== I used the old parameter name on purpose. ==
+Please say why on [[User talk:ParamBot]]. To keep the bot off one article for good, add {{tlx|bots|deny{{=}}ParamBot}} to it.
+
+== How do I stop the bot? ==
+If it's making bad edits, change [[User:ParamBot/Run]] to <code>no</code>. Anyone can do this, and the bot stops straight away. Then explain on [[User talk:ParamBot]].
+
+== Who decides what it changes? ==
+Each rename comes from a list on [[User:ParamBot/Rules]], usually taken from the template's own list of old parameter names. The list can only be changed by [[WP:TPE|template editors]]. The ''rules'' link in each edit summary shows the exact list the bot used.
+
+== Who runs it? ==
+[[User:Phuzion|Phuzion]] and [[User:Zackmann08|Zackmann08]]. It runs once a day and only edits articles.
+
+== Where can I find out more? ==
+[[User:ParamBot/Documentation]] explains everything the bot does, in detail.

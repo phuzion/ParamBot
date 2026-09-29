@@ -7,7 +7,7 @@ from parambot.botpages import check_bot_pages, protection_expiry, too_weak
 
 OPTS = options()
 RULES, RUN, REPORT = OPTS.rules_page, OPTS.run_page, OPTS.report_page
-INSTRUCTIONS, LINK_RULE = OPTS.instructions_page, OPTS.link_rule_page
+INSTRUCTIONS, LINK_RULE, FAQ = OPTS.instructions_page, OPTS.link_rule_page, OPTS.faq_page
 
 
 def check(opts=OPTS, **changes):
@@ -19,7 +19,7 @@ def test_correctly_set_up_pages_pass():
     result, wiki = check()
     assert (result.problems, result.notes) == ([], [])
     assert set(wiki.loaded_titles) == {'User:ExampleBot', RULES, RUN, REPORT, INSTRUCTIONS,
-                                       LINK_RULE}
+                                       LINK_RULE, FAQ}
 
 
 @pytest.mark.parametrize('protection, expected', [
@@ -95,10 +95,11 @@ def test_live_run_checks_the_bot_can_edit_the_report():
 
 def test_protected_run_page_and_missing_helper_pages_are_notes():
     result, _ = check(**{RUN: FakePage(RUN, 'yes', protection={'edit': ('sysop', 'infinity')}),
-                         INSTRUCTIONS: None, LINK_RULE: None})
+                         INSTRUCTIONS: None, LINK_RULE: None, FAQ: None})
     assert result.problems == []
     notes = '\n'.join(result.notes)
     assert "most editors can't use it to stop the bot" in notes
     assert 'Instructions (the instructions for rule writers) does not exist' in notes
     assert f'{LINK_RULE} (the template that shows the list of rules pages) does not exist' \
         in notes
+    assert f'{FAQ} (the FAQ every edit summary links to) does not exist' in notes

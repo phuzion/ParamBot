@@ -1,5 +1,7 @@
 """Whole runs of the bot, on a fake wiki."""
 
+import re
+
 import pytest
 from fakes import (
     ACTIVE_OFFICEHOLDER,
@@ -24,6 +26,7 @@ from parambot.rules import parse_config
 
 FIXED_TEXT = '{{Infobox officeholder\n| term_start = 2020\n}}'
 PERSON_CATEGORY = 'Category:Pages using infobox person with unknown parameters'
+FAQ = f'User:{BOT}/FAQ'
 INACTIVE_OFFICEHOLDER = ('== Active ==\n== Inactive ==\n'
                          + link_rule('Infobox officeholder', OFFICEHOLDER_REVISION))
 # The officeholder rules with a rename to a name the template doesn't accept.
@@ -159,10 +162,20 @@ def test_the_summary_links_to_the_index_when_two_rules_pages_were_used(tmp_path)
     ParamBot(wiki, opts).run()
     [summary] = jane.summaries
     assert 'alma_mater → education' in summary and 'termstart → term_start' in summary
-    assert summary.endswith('([[User:ExampleBot/Rules|rules]])')
+    assert summary.endswith('([[User:ExampleBot/Rules|rules]] · [[User:ExampleBot/FAQ|FAQ]])')
 
 
 # -- what stops an edit ----------------------------------------------------
+
+def test_an_article_deleted_mid_run_is_not_recreated(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    deleted = article('Deleted', deleted_before_save=True)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, deleted)
+    report = ParamBot(wiki, opts).run()
+    assert deleted.saved == []
+    assert report.edits == 0
+    assert report.skipped == [('Deleted', 'page was deleted while the bot was working on it')]
+
 
 def test_nobots_is_respected(tmp_path):
     opts = options(out_dir=str(tmp_path))
@@ -223,7 +236,7 @@ def test_live_run_edits_and_saves_the_report(tmp_path):
     assert jane.summaries == [
         'Fixing deprecated parameters restored in [[Template:Infobox officeholder|Infobox '
         'officeholder]]: termstart → term_start '
-        f'([[Special:Permalink/{OFFICEHOLDER_REVISION}|rules]])']
+        f'([[Special:Permalink/{OFFICEHOLDER_REVISION}|rules]] · [[{FAQ}|FAQ]])']
     report_page = wiki.page(opts.report_page)
     assert len(report_page.saved) == 1
     assert 'made 1 edits' in report_page.saved[0]
@@ -397,17 +410,29 @@ def test_edit_summary():
     result = fix_wikitext(
         '{{Infobox person|other_name=A|module={{Infobox settlement|imagesize=1|image_caption=B}}}}'
         '{{Infobox settlement|imagesize=2}}', targets)
-    assert edit_summary(result, 'User:ExampleBot/Rules') == (
+    assert edit_summary(result, 'User:ExampleBot/Rules', FAQ) == (
         'Fixing deprecated parameters restored in '
         '[[Template:Infobox person|Infobox person]]: other_name → other_names; '
         '[[Template:Infobox settlement|Infobox settlement]]: imagesize → image_size, '
-        'image_caption → caption ([[User:ExampleBot/Rules|rules]])')
+        'image_caption → caption '
+        '([[User:ExampleBot/Rules|rules]] · [[User:ExampleBot/FAQ|FAQ]])')
 
 
-def test_edit_summary_is_truncated():
-    targets = _rules(_table('T', *((f'param{i}', f'new_param{i}') for i in range(60))))
-    result = fix_wikitext('{{T|' + '|'.join(f'param{i}=x' for i in range(60)) + '}}', targets)
-    summary = edit_summary(result, 'User:ExampleBot/Rules')
-    assert len(summary) < SUMMARY_LIMIT + 50
+def test_a_long_edit_summary_is_cut_between_changes():
+    renames = [(f'param{i}', f'new_param{i}') for i in range(60)]
+    text = '{{T|' + '|'.join(f'{old}=x' for old, _ in renames) + '}}'
+    result = fix_wikitext(text, _rules(_table('T', *renames)))
+    summary = edit_summary(result, 'Special:Permalink/1234567890', FAQ)
+    assert len(summary) <= SUMMARY_LIMIT
+    changes, links = summary.split('…')
+    assert re.search(r'param\d+ → new_param\d+$', changes)   # a whole change, then …
+    assert links == ' ([[Special:Permalink/1234567890|rules]] · [[User:ExampleBot/FAQ|FAQ]])'
+
+
+def test_a_long_edit_summary_leaves_no_link_broken():
+    tables = [_table(f'Template number {i}', (f'param{i}', f'new_param{i}')) for i in range(12)]
+    text = ''.join(f'{{{{Template number {i}|param{i}=x}}}}' for i in range(12))
+    summary = edit_summary(fix_wikitext(text, _rules(*tables)), 'User:ExampleBot/Rules', FAQ)
+    assert len(summary) <= SUMMARY_LIMIT
     assert '…' in summary
-    assert summary.endswith('([[User:ExampleBot/Rules|rules]])')
+    assert summary.count('[[') == summary.count(']]')
