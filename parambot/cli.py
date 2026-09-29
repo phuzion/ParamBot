@@ -22,6 +22,10 @@ from .wiki import Wiki
 # Pywikibot reads its configuration when it's first imported, so the modules
 # that import it are imported inside the functions below, after _connect.
 
+# Seconds between API reads, at least: never more than 3,600 an hour.  A run
+# needs a few dozen reads, plus one per 50 articles, so this costs little.
+READ_DELAY = 1
+
 
 def main(argv: list[str] | None = None) -> int:
     _never_crash_printing()
@@ -130,6 +134,8 @@ def _connect(args: argparse.Namespace) -> Wiki:
         f'https://{args.lang}.{args.family}.org/wiki/User:{args.bot_user.replace(" ", "_")}'
     config.user_agent_format = (f'ParamBot/{__version__} ({contact}) '
                                 '{pwb} ({revision}) {http_backend} {python}')
+    # A floor under the time between API reads, whatever part of the bot asks.
+    config.minthrottle = READ_DELAY
     return Wiki(pywikibot.Site(args.lang, args.family))
 
 

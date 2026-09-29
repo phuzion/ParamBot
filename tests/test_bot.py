@@ -196,6 +196,21 @@ def test_no_second_edit_within_the_cooldown(tmp_path):
     assert reason.startswith(f'{BOT} already edited this page on ')
 
 
+def test_hundreds_of_articles_cost_no_request_each(tmp_path):
+    # A request per article (its history, for the cooldown) would get the
+    # bot rate-limited once there were hundreds of them.
+    opts = options(out_dir=str(tmp_path), max_edits=1000)
+    pages = [article(f'Article {i}', revisions=[edited_by(BOT, 45)]) for i in range(500)]
+    recent = article('Recent', revisions=[edited_by(BOT, 3)])
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *pages, recent)
+    report = ParamBot(wiki, opts).run()
+    assert report.edits == 500
+    assert [title for title, _ in report.skipped] == ['Recent']
+    # The article loads need their templates, for the {{bots}} check.
+    assert wiki.requests == {'load': 1, 'redirects': 1, 'load with templates': 1,
+                             'recent_edits': 1}
+
+
 def test_error_on_one_page_is_reported_and_the_run_continues(tmp_path):
     opts = options(out_dir=str(tmp_path))
     wiki = wiki_for(opts).populate(

@@ -6,8 +6,11 @@ Pages are Pywikibot Page objects; the WikiPage protocol lists the parts of
 them the bot relies on.
 """
 
+import re
+import uuid
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import pywikibot
@@ -31,13 +34,11 @@ class WikiPage(Protocol):
     def exists(self) -> bool: ...
     def isRedirectPage(self) -> bool: ...
     def getRedirectTarget(self) -> 'WikiPage': ...
-    def redirects(self, *, namespaces: list[int]) -> Iterable['WikiPage']: ...
     def templates(self) -> list['WikiPage']: ...
     def protection(self) -> dict[str, tuple[str, str]]: ...
     def has_permission(self, action: str = 'edit') -> bool: ...
     def botMayEdit(self) -> bool: ...
     def getOldVersion(self, oldid: int) -> str: ...
-    def revisions(self, total: int | None = None) -> Iterable[Any]: ...
     def save(self, *, summary: str, minor: bool, bot: bool, quiet: bool,
              nocreate: bool = False) -> None: ...
 
@@ -108,9 +109,66 @@ class Wiki:
                         page['lastrevid'])
         return found
 
+    def recent_edits(self, user: str, since: datetime) -> dict[str, datetime]:
+        """{title: when user last edited it}, for every page user has edited
+        since then: a request per 500 edits (5,000 for bots), rather than a
+        look at each page's history."""
+        found: dict[str, datetime] = {}
+        params: dict[str, Any] = {
+            'action': 'query', 'list': 'usercontribs', 'ucuser': user,
+            'ucend': since.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'ucprop': 'title|timestamp', 'uclimit': 'max', 'formatversion': 2}
+        while True:
+            data = self.site.simple_request(**params).submit()
+            for edit in data['query']['usercontribs']:   # newest first
+                when = datetime.fromisoformat(edit['timestamp'].replace('Z', '+00:00'))
+                found.setdefault(edit['title'], when)
+            if 'continue' not in data:
+                break
+            params.update(data['continue'])
+        return found
+
+    def redirects(self, titles: list[str], ns: int) -> dict[str, list[str]]:
+        """{title: the titles in namespace ns that redirect to it}, for
+        BATCH titles a request rather than one each."""
+        found: dict[str, list[str]] = {title: [] for title in titles}
+        for i in range(0, len(titles), BATCH):
+            params: dict[str, Any] = {
+                'action': 'query', 'prop': 'redirects', 'titles': '|'.join(titles[i:i + BATCH]),
+                'rdnamespace': ns, 'rdprop': 'title', 'rdlimit': 'max', 'formatversion': 2}
+            while True:
+                data = self.site.simple_request(**params).submit()
+                for page in data['query']['pages']:
+                    found.setdefault(page['title'], []).extend(
+                        redirect['title'] for redirect in page.get('redirects', []))
+                if 'continue' not in data:
+                    break
+                params.update(data['continue'])
+        return found
+
     def expand(self, text: str) -> str:
         """text with its templates expanded, as if it were in an article."""
         return str(self.site.expand_text(text, title=PROBE_TITLE))
+
+    def expand_all(self, texts: list[str]) -> list[str]:
+        """Each text expanded as if it were in an article, BATCH texts a
+        request rather than one each."""
+        expanded: list[str] = []
+        for i in range(0, len(texts), BATCH):
+            expanded += self._expand_together(texts[i:i + BATCH])
+        return expanded
+
+    def _expand_together(self, texts: list[str]) -> list[str]:
+        if len(texts) == 1:
+            return [self.expand(texts[0])]
+        # A marker no text can contain, between the texts.  If a text's markup
+        # swallows a marker (an unclosed {{ or <!--), expand them one by one.
+        marker = f'ParamBot-{uuid.uuid4().hex}'
+        parts = re.split(rf'\s*{marker}\s*', self.expand(
+            ''.join(f'\n{marker}\n{text}' for text in texts)))
+        if len(parts) != len(texts) + 1 or parts[0].strip():
+            return [self.expand(text) for text in texts]
+        return parts[1:]
 
     # -- categories --------------------------------------------------------
 

@@ -147,6 +147,19 @@ def test_a_wrapper_of_a_template_without_a_list_is_switched_off(person):
         'it passes its parameters on to (Template:Infobox person), so its rules are switched off.']
 
 
+def test_many_wrappers_of_one_template_load_it_once():
+    # Dozens of templates wrap Infobox settlement.
+    wrappers = [FakePage(f'Template:Infobox person {i}', MILITARY_PERSON_SOURCE.replace(
+        'Infobox military person', f'Infobox person {i}')) for i in range(30)]
+    wiki = FakeWiki(FakePage(PERSON, PERSON_SOURCE), *wrappers)
+    config = parse_config(''.join(table(f'Infobox person {i}', ('serviceyears', 'service_years'))
+                                  for i in range(30)))
+    prepared, report = run_prepare(wiki, *config.rulesets.values())
+    assert len(prepared.ready) == 30
+    assert report.problems == []
+    assert wiki.requests['load'] == 2   # the 30 templates, then Infobox person
+
+
 def test_wrappers_that_wrap_each_other_are_switched_off():
     wiki = FakeWiki(FakePage(MILITARY_PERSON, MILITARY_PERSON_SOURCE), FakePage(
         PERSON, '{{#invoke:Template wrapper|wrap|_template=Infobox military person}}'))
@@ -183,22 +196,40 @@ def test_wrong_category_is_reported_and_remembered():
 def test_template_categories_are_expanded_as_for_an_article():
     wiki = FakeWiki()
     known = KnownParams(unknown_text=f'{{{{main other|[[{ANATOMY}|_VALUE_{{{{PAGENAME}}}}]]}}}}')
-    assert template_categories(wiki, 'Infobox bone', known) == [ANATOMY]
+    assert template_categories(wiki, [known]) == [[ANATOMY]]
     assert wiki.expanded == [known.unknown_text]
 
 
 def test_plain_category_text_needs_no_expansion():
     wiki = FakeWiki()
-    assert template_categories(wiki, 'Infobox bone', KnownParams(unknown_text=f'[[{ANATOMY}]]')) \
-        == [ANATOMY]
+    assert template_categories(wiki, [KnownParams(unknown_text=f'[[{ANATOMY}]]'),
+                                      KnownParams()]) == [[ANATOMY], []]
     assert wiki.expanded == []
 
 
 def test_expansion_failure_skips_the_check():
     wiki = FakeWiki()
     wiki.expand_error = ConnectionError('down')
-    known = KnownParams(unknown_text='{{main other|x}}')
-    assert template_categories(wiki, 'Infobox bone', known) is None
+    knowns = [KnownParams(unknown_text='{{main other|x}}'),
+              KnownParams(unknown_text=f'[[{ANATOMY}]]')]
+    assert template_categories(wiki, knowns) == [None, [ANATOMY]]
+
+
+def test_many_templates_need_one_request_for_redirects_and_one_for_categories():
+    # A request for each template got the bot rate-limited (HTTP 429) once
+    # there were 87 of them.
+    names = [f'Infobox test {i}' for i in range(60)]
+    wiki = FakeWiki(*(FakePage(
+        f'Template:{name}',
+        '{{#invoke:Check for unknown parameters|check|unknown={{main other|'
+        f'[[Category:Pages using infobox test {i} with unknown parameters|_VALUE_]]}}}}| new }}}}',
+        redirects=[FakePage(f'Template:Test {i}')]) for i, name in enumerate(names)))
+    config = parse_config(''.join(table(name, ('old', 'new')) for name in names))
+    prepared, report = run_prepare(wiki, *config.rulesets.values())
+    assert len(prepared.ready) == 60
+    assert prepared.ready[7].names == {'Infobox test 7', 'Test 7'}
+    assert (report.problems, report.notes) == ([], [])
+    assert wiki.requests == {'load': 1, 'redirects': 1, 'expand': 1}
 
 
 def _bone(caption_category=''):

@@ -265,7 +265,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 
 == Technical details ==
 * Written in Python, using [[mw:Manual:Pywikibot|Pywikibot]] to talk to the wiki and [https://github.com/earwig/mwparserfromhell mwparserfromhell] to read wikitext. It runs once a day on [[wikitech:Help:Toolforge|Toolforge]].
-* Edits are marked as bot edits, at least 10 seconds apart, with <code>maxlag=5</code>, so it backs off when the servers are busy. It reads pages, revisions and categories in batches of 50.
+* Edits are marked as bot edits, at least 10 seconds apart, with <code>maxlag=5</code>, so it backs off when the servers are busy. It waits at least a second between reads, and reads pages, redirects, revisions and categories in batches of 50. The 30-day cooldown comes from one look at the bot's own recent edits, not from each article's history.
 * It identifies itself in its user agent with a link to [[User:ParamBot]].
 * Before a template's rules are used, it reads the template's own <code>Check for unknown parameters</code> call, including patterns such as <code>regexp1</code> and the extra map parameters added by <code>mapframe_args</code> and <code>pushpin_map_args</code>. To work out which category a template uses, it expands the call's <code>unknown=</code> text as MediaWiki would in an article.
 * For a wrapper template, it follows the <code><nowiki>{{#invoke:Template wrapper|wrap|...}}</nowiki></code> call to the template it wraps, up to five wrappers deep, and handles the wrapper's <code>_exclude</code>, <code>_reuse</code> and <code>_alias-map</code> as the module does. Before working out the category, it fills in the settings the wrapper passes on, such as <code>template_name</code>.

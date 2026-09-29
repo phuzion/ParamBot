@@ -25,7 +25,6 @@ log = logging.getLogger('parambot')
 SUMMARY_LIMIT = 500  # characters; MediaWiki cuts longer summaries
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
 MAX_FAILURES_IN_A_ROW = 5
-HISTORY_LIMIT = 50  # revisions to look through for the bot's last edit
 
 
 class StopRun(Exception):
@@ -46,6 +45,7 @@ class ParamBot:
         self.options = options
         self.report = Report()
         self.diffs: list[str] = []
+        self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
 
     # -- a run -------------------------------------------------------------
 
@@ -113,7 +113,10 @@ class ParamBot:
         else:
             candidates = self._candidates(active, prepared)
         log.info('%d candidate pages', len(candidates))
-        self._process_all(candidates, self.wiki.load(c.page for c in candidates.values()))
+        # With the templates each page uses, which {{bots}} and {{nobots}}
+        # are checked against: otherwise that's a request for each page.
+        self._process_all(candidates, self.wiki.load((c.page for c in candidates.values()),
+                                                     templates=True))
 
     # -- setup -------------------------------------------------------------
 
@@ -309,17 +312,13 @@ class ParamBot:
         """When the bot last edited the page, if it did within the cooldown."""
         if not self.options.cooldown_days:
             return None
-        cutoff = datetime.now(UTC) - timedelta(days=self.options.cooldown_days)
-        bot = normalize_title(self.options.bot_user)
-        for revision in page.revisions(total=HISTORY_LIMIT):
-            when = revision.timestamp
-            if when.tzinfo is None:
-                when = when.replace(tzinfo=UTC)
-            if when < cutoff:
-                break
-            if revision.user and normalize_title(revision.user) == bot:
-                return when
-        return None
+        if self._recent_edits is None:
+            # One look at the bot's own edits, not at every page's history:
+            # a request per page gets the bot rate-limited once there are
+            # hundreds of pages.
+            since = datetime.now(UTC) - timedelta(days=self.options.cooldown_days)
+            self._recent_edits = self.wiki.recent_edits(self.options.bot_user, since)
+        return self._recent_edits.get(page.title())
 
     def _record_diff(self, title: str, old: str, new: str, summary: str) -> None:
         diff = difflib.unified_diff(

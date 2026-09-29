@@ -5,6 +5,7 @@ parts of a Pywikibot Page listed in parambot.wiki.WikiPage.
 """
 
 import re
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from pywikibot import exceptions as pwb_exc
@@ -81,9 +82,6 @@ class FakePage:
     def getRedirectTarget(self):
         return self.redirect_to
 
-    def redirects(self, *, namespaces=None):
-        return self._redirects
-
     def templates(self):
         return self._templates
 
@@ -95,9 +93,6 @@ class FakePage:
 
     def botMayEdit(self):
         return self._may_edit
-
-    def revisions(self, total=None):
-        return self._revisions[:total]
 
     def save(self, *, summary, minor, bot, quiet, nocreate=False):
         if self._save_error:
@@ -121,7 +116,8 @@ class FakeWiki:
         self.sizes = {}          # category -> size, or None for a missing category
         self.members = {}        # category -> [pages]
         self.expand_error = None
-        self.expanded = []       # texts passed to expand()
+        self.expanded = []       # texts passed to expand() or expand_all()
+        self.requests = Counter()  # API requests that could be one per template
         self.logged_in = False
         self.polled = []         # categories whose size was asked for
         self.loaded_titles = []  # titles passed to load_titles()
@@ -154,6 +150,8 @@ class FakeWiki:
         return self.pages.get(title) or FakePage(title, exists=False)
 
     def load(self, pages, *, templates=False):
+        pages = list(pages)
+        self.requests['load with templates' if templates else 'load'] += 1
         yield from pages
 
     def load_titles(self, titles, *, templates=False):
@@ -173,10 +171,42 @@ class FakeWiki:
                                             page.latest_revision_id)
         return found
 
-    def expand(self, text):
-        self.expanded.append(text)
+    def recent_edits(self, user, since):
+        # Pages have no history of their own to look at: the bot must ask
+        # about its own edits once, not about each page.
+        self.requests['recent_edits'] += 1
+        found = {}
+        for page in self.pages.values():
+            for revision in page._revisions:
+                when = revision.timestamp
+                if revision.user == user and when >= since:
+                    found[page.title()] = max(when, found.get(page.title(), when))
+        return found
+
+    def redirects(self, titles, ns):
+        self.requests['redirects'] += 1
+        targets = {page.redirect_to.title(): page.redirect_to
+                   for page in self.pages.values() if page.redirect_to is not None}
+        found = {}
+        for title in titles:
+            page = self.pages.get(title) or targets.get(title)
+            found[title] = [redirect.title() for redirect in page._redirects] if page else []
+        return found
+
+    def expand_all(self, texts):
+        self.requests['expand'] += 1
         if self.expand_error:
             raise self.expand_error
+        return [self._expand(text) for text in texts]
+
+    def expand(self, text):
+        self.requests['expand'] += 1
+        if self.expand_error:
+            raise self.expand_error
+        return self._expand(text)
+
+    def _expand(self, text):
+        self.expanded.append(text)
         # Enough of MediaWiki for these tests: {{main other|x}} in an article is x.
         text = re.sub(r'\{\{lcfirst:([^{}]*)\}\}', lambda m: m[1][:1].lower() + m[1][1:], text)
         return re.sub(r'\{\{main other\|(.*)\}\}', r'\1', text).replace(

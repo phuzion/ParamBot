@@ -123,6 +123,14 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   it makes no more wiki edits, not even the report, which is written to a
   local file instead.
 - **Edit cap.** At most 100 edits per run (`--max-edits`).
+- **Gentle on the API.** Every read waits at least a second after the last
+  one (`READ_DELAY` in `cli.py`), so the bot can't make more than 3,600 an
+  hour, and edits are at least 10 seconds apart. Nothing is asked once per
+  article or per template: pages, their templates, redirects, categories and
+  expansions go 50 to a request, and the cooldown comes from one look at the
+  bot's own recent edits. A run needs about 25 reads, plus about one for each
+  50 templates and each 50 articles, one for each category with pages in it,
+  and, in a live run, one for each edit, to check the Run page.
 - **Errors are reported.** An error on one page is logged, the page is listed
   as not edited, and the run carries on. Five failures in a row, or any
   failure outside the page loop, stop the run. The report is still saved, with
