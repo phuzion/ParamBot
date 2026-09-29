@@ -5,6 +5,8 @@ says what was ignored and how to fix it.  Keeping the wording here keeps the
 logic elsewhere short, and lets it be reviewed in one place.
 """
 
+from collections.abc import Sequence
+
 AWB_TEMPLATE = 'AWB rename template parameter'
 
 
@@ -211,10 +213,16 @@ def template_missing(template: str) -> str:
             'Check the spelling of its name.')
 
 
-def no_parameter_list(template: str) -> str:
+def no_parameter_list(template: str, passed_to: Sequence[str] = ()) -> str:
+    """passed_to: the templates a wrapper template passes its parameters on
+    to, in order."""
+    wrapped = ''
+    if passed_to:
+        chain = ', then '.join(f'Template:{name}' for name in passed_to)
+        wrapped = f', and neither does the template it passes its parameters on to ({chain})'
     return (f'Template:{template} has no list of accepted parameters the bot can read (a '
-            '{{#invoke:Check for unknown parameters|check|...}} call), so its rules are '
-            'switched off.')
+            f'{{{{#invoke:Check for unknown parameters|check|...}}}} call){wrapped}, so its '
+            'rules are switched off.')
 
 
 def rules_for_a_redirect(template: str, actual: str, page: str) -> str:

@@ -44,7 +44,9 @@ replacement.
 3. **Checks every template the rules name,** active or inactive. It loads each
    template's redirects and its
    `{{#invoke:Check for unknown parameters|check|...}}` list of accepted
-   parameters, and reports rules that can't work.
+   parameters, and reports rules that can't work. A wrapper template, which
+   passes its parameters on through `{{#invoke:Template wrapper|wrap|...}}`,
+   uses the list of the template it wraps, plus the names it keeps for itself.
 4. **Checks the size of each template's unknown-parameters category,** 50 at
    a time, and skips the empty ones.
 5. **Fixes each article** in the categories that have pages, using the active
@@ -196,7 +198,8 @@ wiki as exactly what the bot will do:
   `|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]`.
   On every run the bot works out which category each template really uses,
   by expanding the template's `Check for unknown parameters` call as if for an
-  article. If a table watches the wrong one, the report says which link to
+  article (for a wrapper, the wrapped template's call, with the wrapper's
+  settings, such as `template_name`, filled in). If a table watches the wrong one, the report says which link to
   add.
 - **Columns:** column 1 holds the old names, column 2 the new name or
   `remove`. An optional column headed *If both are set* can say `merge`;
@@ -372,7 +375,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `parambot/wikitable.py` | Reading wikitables: captions, header rows, `rowspan` and `colspan`. |
 | `parambot/prepare.py` | Checking each `RuleSet` against its template, giving the `TemplateRules` the fixer applies. |
 | `parambot/fixer.py` | Applying `TemplateRules` to a page's wikitext. |
-| `parambot/templatescan.py` | Reading a template's own parameter checks; `scaffold`. |
+| `parambot/templatescan.py` | Reading a template's own parameter checks, and wrapper templates; `scaffold`. |
 | `parambot/luapattern.py` | Lua patterns, as used in templates, translated to Python regexes. |
 | `parambot/report.py` | The report page. |
 | `parambot/messages.py` | Everything the bot says on the report, in edit summaries and when it stops. |

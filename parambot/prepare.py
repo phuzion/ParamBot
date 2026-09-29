@@ -2,9 +2,10 @@
 
 Every run, before touching any article, each rule set is checked against its
 template on the wiki: the template must exist and have a list of accepted
-parameters the bot can read, and its table must watch the category the
-template really uses.  Anything wrong goes on the report.  Each usable rule
-set becomes a TemplateRules, which is what the fixer applies.
+parameters the bot can read (a wrapper template's comes from the template it
+wraps), and its table must watch the category the template really uses.
+Anything wrong goes on the report.  Each usable rule set becomes a
+TemplateRules, which is what the fixer applies.
 
 Inactive rule sets are checked the same way; the caller decides not to use
 them.
@@ -18,13 +19,21 @@ from . import messages as msg
 from .fixer import TemplateRules
 from .report import Report
 from .rules import RuleSet
-from .templatescan import KnownParams, categories_in, known_params
+from .templatescan import (
+    KnownParams,
+    WrappedParams,
+    Wrapper,
+    categories_in,
+    known_params,
+    wrapper_call,
+)
 from .wiki import Wiki, WikiPage
 from .wikitext import normalize_template_name
 
 log = logging.getLogger('parambot')
 
 TEMPLATE_NAMESPACE = 10
+MAX_WRAPPERS = 5   # a wrapper of a wrapper of ...: any more is surely a loop
 
 
 @dataclass
@@ -65,11 +74,11 @@ def _prepare_one(wiki: Wiki, ruleset: RuleSet, page: WikiPage, report: Report,
     names |= {normalize_template_name(redirect.title(with_ns=False))
               for redirect in page.redirects(namespaces=[TEMPLATE_NAMESPACE])}
 
-    known = known_params(page.text)
+    known, passed_to = template_params(wiki, page)
     if known is None:
         # Without the list, a backwards rule (image_size → imagesize) would
         # break every page it touched, so don't guess.
-        report.problems.append(msg.no_parameter_list(template))
+        report.problems.append(msg.no_parameter_list(template, passed_to))
         return None
 
     problem = category_problem(ruleset, template_categories(wiki, template, known))
@@ -83,6 +92,28 @@ def _prepare_one(wiki: Wiki, ruleset: RuleSet, page: WikiPage, report: Report,
         if rule.new is not None and rule.new not in known:
             report.problems.append(msg.target_not_accepted(template, rule.old, rule.new))
     return TemplateRules(ruleset, frozenset(names), known)
+
+
+def template_params(wiki: Wiki, page: WikiPage) -> tuple[KnownParams | None, list[str]]:
+    """The parameters a template accepts, or None if the bot can't tell,
+    and the templates it passes them on to, if it's a wrapper."""
+    wrappers: list[Wrapper] = []
+    while (known := known_params(page.text)) is None:
+        wrapper = wrapper_call(page.text)
+        if wrapper is None or len(wrappers) == MAX_WRAPPERS:
+            break
+        wrappers.append(wrapper)
+        page = wiki.page(wrapper.template, ns=TEMPLATE_NAMESPACE)
+        if page.exists() and page.isRedirectPage():
+            page = page.getRedirectTarget()
+        if not page.exists():
+            break
+    passed_to = [wrapper.template for wrapper in wrappers]
+    if known is None:
+        return None, passed_to
+    for wrapper in reversed(wrappers):
+        known = WrappedParams(wrapper, known)
+    return known, passed_to
 
 
 def _one_per_template(ready: list[TemplateRules], redirected: dict[str, str],

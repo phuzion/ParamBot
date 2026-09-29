@@ -178,6 +178,7 @@ class FakeWiki:
         if self.expand_error:
             raise self.expand_error
         # Enough of MediaWiki for these tests: {{main other|x}} in an article is x.
+        text = re.sub(r'\{\{lcfirst:([^{}]*)\}\}', lambda m: m[1][:1].lower() + m[1][1:], text)
         return re.sub(r'\{\{main other\|(.*)\}\}', r'\1', text).replace(
             '{{PAGENAME}}', 'ParamBot probe')
 

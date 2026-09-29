@@ -1,7 +1,15 @@
 import pytest
 
 from parambot.rules import parse_config
-from parambot.templatescan import _to_number_form, categories_in, known_params, scaffold_table
+from parambot.templatescan import (
+    WrappedParams,
+    Wrapper,
+    _to_number_form,
+    categories_in,
+    known_params,
+    scaffold_table,
+    wrapper_call,
+)
 
 UNKNOWN = ('{{main other|[[Category:Pages using infobox example with unknown parameters'
            '|_VALUE_{{PAGENAME}}]]}}')
@@ -54,6 +62,84 @@ def test_categories_in():
 
 def test_known_params_absent():
     assert known_params('{{Infobox|above={{{name|}}}}}') is None
+
+
+# -- wrapper templates -----------------------------------------------------
+
+# Like Infobox military person and Infobox person.
+WRAPPER = '''<includeonly>{{#invoke:Template wrapper|wrap|_template = Infobox person
+| _alias-map = other_name:other_names, relations:relatives, office#:post#
+| _exclude   = allegiance, service_years, <!-- for now --> battles
+| _reuse     = known_for
+| template_name = Infobox military person
+| embed_title = Military career
+}}</includeonly><noinclude>{{Documentation}}</noinclude>'''
+WRAPPED = ('{{#invoke:Check for unknown parameters|check|unknown={{main other|'
+           '[[Category:Pages using {{if empty|{{lcfirst:{{{template_name|}}}}}'
+           '|infobox person}} with unknown parameters|_VALUE_{{PAGENAME}}]]}}'
+           '| birth_name | other_names | relatives | known_for | template_name | embed_title'
+           '| regexp1 = post[0-9]+ }}')
+
+
+def test_wrapper_call():
+    assert wrapper_call(WRAPPER) == Wrapper(
+        template='Infobox person',
+        keeps=frozenset({'allegiance', 'service_years', 'battles', 'known_for'}),
+        aliases={'other_name': 'other_names', 'relations': 'relatives', 'office#': 'post#'},
+        args={'template_name': 'Infobox military person', 'embed_title': 'Military career'})
+
+
+@pytest.mark.parametrize('name, passed', [
+    ('birth_name', 'birth_name'),     # passed on as it is
+    ('other_name', 'other_names'),    # an alias
+    ('office2', 'post2'),             # a numbered alias
+    ('office', 'post'),               # ... without its number
+    ('service_years', None),          # excluded: the wrapper uses it itself
+    ('known_for', None),              # reused: the same
+])
+def test_what_a_wrapper_passes_on(name, passed):
+    assert wrapper_call(WRAPPER).passes(name) == passed
+
+
+def test_a_wrapper_accepts_what_it_keeps_and_what_it_passes_on_that_is_accepted():
+    known = WrappedParams(wrapper_call(WRAPPER), known_params(WRAPPED))
+    for name in ('birth_name', 'other_name', 'other_names', 'office3', 'post3',
+                 'service_years', 'battles', 'known_for'):
+        assert name in known, name
+    for name in ('serviceyears', 'birthname', 'office', 'relations2'):
+        assert name not in known, name
+
+
+def test_a_wrapper_gives_the_template_it_wraps_its_category():
+    known = WrappedParams(wrapper_call(WRAPPER), known_params(WRAPPED))
+    assert known.unknown_text == (
+        '{{main other|[[Category:Pages using {{if empty|{{lcfirst:Infobox military person}}'
+        '|infobox person}} with unknown parameters|_VALUE_{{PAGENAME}}]]}}')
+
+
+def test_a_wrapper_of_a_wrapper():
+    outer = wrapper_call('{{#invoke:Template wrapper|wrap|_template=Infobox military person'
+                         '|_exclude=regiment|_alias-map=born_as:birth_name'
+                         '|template_name=Infobox soldier}}')
+    known = WrappedParams(outer, WrappedParams(wrapper_call(WRAPPER), known_params(WRAPPED)))
+    for name in ('regiment', 'born_as', 'service_years', 'other_name', 'birth_name'):
+        assert name in known, name
+    assert 'serviceyears' not in known
+    # The outer wrapper's template_name wins.
+    assert '{{lcfirst:Infobox soldier}}' in known.unknown_text
+
+
+@pytest.mark.parametrize('source', [
+    '{{Infobox|above={{{name|}}}}}',                                   # not a wrapper
+    '{{#invoke:Template wrapper|list|_template=Infobox person}}',       # only shows a call
+    '{{#invoke:Template wrapper|wrap|template_name=Infobox person}}',   # wraps nothing
+    '{{#invoke:Template wrapper|wrap|_template={{{type|Infobox person}}}}}',
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person|_exclude={{{keep|}}}}}',
+    '{{#if:{{{a|}}}|{{#invoke:Template wrapper|wrap|_template=A}}'
+    '|{{#invoke:Template wrapper|wrap|_template=B}}}}',                # it picks one
+])
+def test_wrappers_the_bot_cannot_read(source):
+    assert wrapper_call(source) is None
 
 
 def test_scaffold_roundtrip():

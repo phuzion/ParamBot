@@ -5,13 +5,20 @@
 to leave a rule alone while the template still accepts the old name, and to
 refuse to rename anything to a name the template doesn't accept.
 
+A wrapper template, such as Infobox military person, has no such call: it
+passes an article's parameters on to another template through
+``{{#invoke:Template wrapper|wrap|_template=...}}``.  ``wrapper_call`` reads
+that call, and ``WrappedParams`` combines it with the other template's list.
+
 ``scaffold_table`` turns the template's
 ``{{#invoke:Check for deprecated parameters|check|...}}`` call into a rules
 table for the rules page.
 """
 
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import suppress
+from dataclasses import dataclass
 
 import mwparserfromhell
 from mwparserfromhell.nodes import Template
@@ -20,7 +27,8 @@ from mwparserfromhell.wikicode import Wikicode
 from .luapattern import LuaPattern, LuaPatternError
 from .wikitext import normalize_category, normalize_template_name, param_name, strip_comments
 
-__all__ = ['KnownParams', 'known_params', 'categories_in', 'scaffold_table']
+__all__ = ['KnownParams', 'WrappedParams', 'Wrapper', 'known_params', 'wrapper_call',
+           'categories_in', 'scaffold_table']
 
 # Copied from Module:Check for unknown parameters, which adds these names
 # when the call has |mapframe_args=y or |pushpin_map_args=y.
@@ -49,7 +57,10 @@ PUSHPIN_MAP_PARAMS = frozenset('''
 
 _UNKNOWN_MODULE = 'Check for unknown parameters'
 _DEPRECATED_MODULE = 'Check for deprecated parameters'
+_WRAPPER_MODULE = 'Template wrapper'
 _NOT_RULES = ('_category', 'ignoreblank', 'preview')  # settings of the deprecated check
+# Module:Template wrapper's own settings, which it doesn't pass on.
+_WRAPPER_SETTINGS = ('_template', '_exclude', '_reuse', '_include-positional', '_alias-map')
 
 
 class KnownParams:
@@ -70,6 +81,134 @@ class KnownParams:
     def __contains__(self, name: object) -> bool:
         return isinstance(name, str) and (
             name in self.names or any(p.fullmatch(name) for p in self.patterns))
+
+    # For WrappedParams.  A template that checks its own parameters sees an
+    # article's names as they are, and gets no settings from a wrapper.
+
+    def _passed_on(self, name: str) -> str | None:
+        return name
+
+    def _settings(self) -> dict[str, str]:
+        return {}
+
+    def _check_text(self) -> str | None:
+        return self.unknown_text
+
+
+@dataclass(frozen=True)
+class Wrapper:
+    """A {{#invoke:Template wrapper|wrap|...}} call: the template it passes
+    an article's parameters on to, and what it does with them on the way."""
+
+    template: str                   # |_template=
+    keeps: frozenset[str]           # |_exclude= and |_reuse=: never passed on
+    aliases: Mapping[str, str]      # |_alias-map=: {wrapper's name: other template's}
+    args: Mapping[str, str]         # its other settings, such as template_name
+
+    def passes(self, name: str) -> str | None:
+        """The name an article's parameter is passed on as, or None if the
+        wrapper keeps it for itself.  As Module:Template wrapper does it."""
+        name = self._alias(name)
+        return None if name in self.keeps else name
+
+    def _alias(self, name: str) -> str:
+        if name in self.aliases:
+            return self.aliases[name]
+        # '#' stands for a number: foo#:bar# makes foo2 bar2, and foo bar.
+        if name + '#' in self.aliases:
+            return self.aliases[name + '#'].replace('#', '')
+        number = re.search('[0-9]+', name)
+        if number:
+            alias = self.aliases.get(re.sub('[0-9]+', '#', name))
+            if alias is not None:
+                return alias.replace('#', number.group(0))
+        return name
+
+
+class WrappedParams(KnownParams):
+    """The parameters a wrapper template accepts: the names it keeps for
+    itself, and the names the template it wraps accepts once the wrapper
+    has passed them on.
+
+    ``unknown_text`` is the wrapped template's, with the settings the
+    wrapper gives it filled in, since its category is often named after
+    ``template_name``."""
+
+    def __init__(self, wrapper: Wrapper, inner: KnownParams) -> None:
+        super().__init__()
+        self.wrapper, self.inner = wrapper, inner
+        self.unknown_text = _fill_in(self._check_text(), self._settings())
+
+    def __repr__(self) -> str:
+        return f'WrappedParams({self.wrapper.template!r}, {self.inner!r})'
+
+    def __contains__(self, name: object) -> bool:
+        if not isinstance(name, str):
+            return False
+        passed = self.wrapper.passes(name)
+        return passed is None or passed in self.inner
+
+    def _passed_on(self, name: str) -> str | None:
+        passed = self.wrapper.passes(name)
+        return None if passed is None else self.inner._passed_on(passed)
+
+    def _settings(self) -> dict[str, str]:
+        # A wrapper's settings go to the template it wraps, and override
+        # that template's own settings, if it's a wrapper too.
+        settings = self.inner._settings()
+        for name, value in self.wrapper.args.items():
+            passed = self.inner._passed_on(name)
+            if passed is not None:
+                settings[passed] = value
+        return settings
+
+    def _check_text(self) -> str | None:
+        return self.inner._check_text()
+
+
+def _fill_in(text: str | None, args: Mapping[str, str]) -> str | None:
+    """text with each {{{name|default}}} given in args replaced by its value."""
+    if not text or not args:
+        return text
+    code = mwparserfromhell.parse(text)
+    for argument in code.filter_arguments(recursive=True):
+        name = strip_comments(argument.name).strip()
+        if name in args:
+            # ValueError: in the default of an argument already replaced.
+            with suppress(ValueError):
+                code.replace(argument, args[name])
+    return str(code)
+
+
+def wrapper_call(source: str) -> Wrapper | None:
+    """The template source's {{#invoke:Template wrapper|wrap|...}} call, or
+    None if it has none, or has one the bot can't read."""
+    calls = list(_invokes(mwparserfromhell.parse(source), _WRAPPER_MODULE, 'wrap'))
+    if len(calls) != 1:
+        return None   # more than one: it picks a template the bot can't tell
+    settings: dict[str, str] = {}
+    for param in calls[0].params[1:]:
+        if param.showkey and not param_name(param).isdigit():   # positional ones aren't used
+            settings[param_name(param)] = strip_comments(param.value).strip()
+    settings = {key: value for key, value in settings.items() if value}
+    template = settings.get('_template')
+    if not template or any('{' in settings.get(key, '') for key in _WRAPPER_SETTINGS):
+        return None
+    aliases: dict[str, str] = {}
+    for pair in _list(settings.get('_alias-map', '')):
+        m = re.match(r'(.*?)\s*:\s*(.+)', pair)
+        if m and m.group(1):
+            aliases[m.group(1)] = m.group(2)
+    return Wrapper(
+        template=normalize_template_name(template),
+        keeps=frozenset(_list(settings.get('_exclude', '')) + _list(settings.get('_reuse', ''))),
+        aliases=aliases,
+        args={key: value for key, value in settings.items() if key not in _WRAPPER_SETTINGS})
+
+
+def _list(value: str) -> list[str]:
+    """A wrapper setting's comma-separated names."""
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
 def known_params(source: str) -> KnownParams | None:
@@ -114,8 +253,8 @@ def categories_in(wikitext: str) -> list[str]:
     return out
 
 
-def _invokes(code: Wikicode, module: str) -> Iterator[Template]:
-    """The {{#invoke:module|check|...}} calls in parsed wikitext."""
+def _invokes(code: Wikicode, module: str, function: str = 'check') -> Iterator[Template]:
+    """The {{#invoke:module|function|...}} calls in parsed wikitext."""
     for call in code.filter_templates(recursive=True):
         name = ' '.join(strip_comments(call.name).replace('_', ' ').split())
         m = re.fullmatch(r'#invoke\s*:\s*(.+)', name, re.IGNORECASE)
@@ -124,7 +263,7 @@ def _invokes(code: Wikicode, module: str) -> Iterator[Template]:
         target = re.sub(r'^module\s*:\s*', '', m.group(1), flags=re.IGNORECASE)
         if (normalize_template_name(target) == module and call.params
                 and not call.params[0].showkey
-                and strip_comments(call.params[0].value).strip() == 'check'):
+                and strip_comments(call.params[0].value).strip() == function):
             yield call
 
 

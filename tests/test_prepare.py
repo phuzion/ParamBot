@@ -1,7 +1,9 @@
 """Checking rule sets against the templates on the wiki."""
 
+import pytest
 from fakes import OFFICEHOLDER_SOURCE, FakePage, FakeWiki
 
+from parambot.fixer import fix_wikitext
 from parambot.prepare import category_problem, prepare, template_categories
 from parambot.report import Report
 from parambot.rules import parse_config
@@ -88,6 +90,70 @@ def test_template_without_a_parameter_list_is_switched_off():
     prepared, report = run_prepare(wiki, officeholder(('a', 'b')))
     assert prepared.ready == []
     assert 'has no list of accepted parameters' in report.problems[0]
+
+
+# -- wrapper templates -----------------------------------------------------
+
+PERSON = 'Template:Infobox person'
+MILITARY_PERSON = 'Template:Infobox military person'
+# Infobox person names its category after the template_name it's given.
+PERSON_SOURCE = ('{{#invoke:Check for unknown parameters|check|unknown={{main other|'
+                 '[[Category:Pages using {{lcfirst:{{{template_name|Infobox person}}}}} with '
+                 'unknown parameters|_VALUE_]]}}| birth_name | burial_place | template_name }}')
+MILITARY_PERSON_SOURCE = ('{{#invoke:Template wrapper|wrap|_template=Infobox person'
+                          '|_exclude=service_years|template_name=Infobox military person}}')
+
+
+def military_person(*pairs):
+    return parse_config(table('Infobox military person', *pairs)).rulesets[
+        'Infobox military person']
+
+
+def test_a_wrapper_uses_the_list_of_the_template_it_wraps():
+    wiki = FakeWiki(FakePage(PERSON, PERSON_SOURCE),
+                    FakePage(MILITARY_PERSON, MILITARY_PERSON_SOURCE))
+    prepared, report = run_prepare(wiki, military_person(
+        ('serviceyears', 'service_years'), ('placeofburial', 'burial_place')))
+    [target] = prepared.ready
+    assert target.names == {'Infobox military person'}
+    assert target.still_accepts('service_years') and target.still_accepts('burial_place')
+    assert target.rejects('serviceyears')
+    # No problems: the category, named after the wrapper, is the one it watches.
+    assert (report.problems, report.notes) == ([], [])
+    result = fix_wikitext('{{Infobox military person\n| serviceyears = 1959–1988\n}}',
+                          prepared.ready)
+    assert 'service_years' in result.text and 'serviceyears' not in result.text
+
+
+def test_a_wrapper_is_followed_through_a_redirect():
+    person = FakePage(PERSON, PERSON_SOURCE)
+    wiki = FakeWiki(person, FakePage('Template:Infobox human', redirect_to=person),
+                    FakePage(MILITARY_PERSON,
+                             MILITARY_PERSON_SOURCE.replace('Infobox person', 'Infobox human')))
+    prepared, report = run_prepare(wiki, military_person(('serviceyears', 'service_years')))
+    assert len(prepared.ready) == 1
+    assert report.problems == []
+
+
+@pytest.mark.parametrize('person', [FakePage(PERSON, '{{Infobox}}'),
+                                    FakePage(PERSON, exists=False)])
+def test_a_wrapper_of_a_template_without_a_list_is_switched_off(person):
+    wiki = FakeWiki(person, FakePage(MILITARY_PERSON, MILITARY_PERSON_SOURCE))
+    prepared, report = run_prepare(wiki, military_person(('serviceyears', 'service_years')))
+    assert prepared.ready == []
+    assert report.problems == [
+        'Template:Infobox military person has no list of accepted parameters the bot can read (a '
+        '{{#invoke:Check for unknown parameters|check|...}} call), and neither does the template '
+        'it passes its parameters on to (Template:Infobox person), so its rules are switched off.']
+
+
+def test_wrappers_that_wrap_each_other_are_switched_off():
+    wiki = FakeWiki(FakePage(MILITARY_PERSON, MILITARY_PERSON_SOURCE), FakePage(
+        PERSON, '{{#invoke:Template wrapper|wrap|_template=Infobox military person}}'))
+    prepared, report = run_prepare(wiki, military_person(('serviceyears', 'service_years')))
+    assert prepared.ready == []
+    assert ('(Template:Infobox person, then Template:Infobox military person, then '
+            'Template:Infobox person, ') in report.problems[0]
 
 
 def test_rules_that_wait_and_rules_that_cannot_work():

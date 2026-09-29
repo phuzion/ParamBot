@@ -150,7 +150,7 @@ The bot also:
 * keeps the page's layout, including lined-up <code>=</code> signs
 * won't edit an article again within 30 days of its last edit there, in case someone put the old parameter back on purpose. It lists the article under ''Not edited'' instead.
 * stays off any article with {{tlx|bots|deny{{=}}ParamBot}} or {{tlx|nobots}}
-* ignores a template's rules entirely if it can't read the template's list of accepted parameters. This is reported under ''Rules page problems''.
+* ignores a template's rules entirely if it can't read the template's list of accepted parameters. This is reported under ''Rules page problems''. A wrapper template, such as {{tl|Infobox military person}}, uses the list of the template it wraps.
 
 == If both parameters are filled in ==
 By default, when an article has the old and the new parameter filled in with different values, the bot leaves it for a human. To merge them instead, add a third column headed <code>If both are set</code> and write <code>merge</code> in the rows that should be merged. The bot then adds the old value to the end of the new one, on a new line.
