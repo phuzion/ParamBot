@@ -344,6 +344,9 @@ Toolforge chooses the time of day.
    - `User:ParamBot/Documentation`, a copy of
      [`docs/documentation.mediawiki`](docs/documentation.mediawiki), for
      anyone wondering what the bot does (optional)
+   - `User talk:ParamBot`, a copy of
+     [`docs/talk-page.mediawiki`](docs/talk-page.mediawiki); the FAQ sends
+     people there to report bad edits
    - `User:ParamBot/Report`, a placeholder
    - `User:ParamBot/Run`, containing `yes`
 
@@ -385,6 +388,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `docs/link-rule.mediawiki` | The `User:ParamBot/LinkRule` template, for the wiki. |
 | `docs/documentation.mediawiki` | Full documentation of the bot, for `User:ParamBot/Documentation`. |
 | `docs/faq.mediawiki` | A short FAQ, for `User:ParamBot/FAQ`, which every edit summary links to. |
+| `docs/talk-page.mediawiki` | The header of `User talk:ParamBot`, with archiving. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job and Pywikibot config template. |

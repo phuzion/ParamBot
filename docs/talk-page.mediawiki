@@ -1,0 +1,24 @@
+<!--
+  The header of [[User talk:ParamBot]]: where to report a bad edit, how to
+  stop the bot (a message here does not), and archiving by lowercase
+  sigmabot III. Keep its advice in step with docs/faq.mediawiki.
+-->
+{{User:MiszaBot/config
+| algo                = old(60d)
+| archive             = User talk:ParamBot/Archive %(counter)d
+| counter             = 1
+| maxarchivesize      = 150K
+| archiveheader       = {{Archive}}
+| minthreadstoarchive = 1
+| minthreadsleft      = 4
+}}
+{{tmbox
+| type = notice
+| text = '''This is the talk page of [[User:ParamBot|ParamBot]]''', a bot run by [[User:Phuzion|Phuzion]] and [[User:Zackmann08|Zackmann08]]. When an old, deprecated infobox parameter comes back into an article, it puts the new name back. Both operators watch this page.
+* '''Is it making bad edits?''' Change [[User:ParamBot/Run]] to <code>no</code>, and it stops straight away. Then say what happened below. ''A message on this page does not stop the bot.''
+* '''Was one edit wrong?''' Revert it, and [{{fullurl:User talk:ParamBot|action=edit&section=new}} start a new section] with a link to the diff. The bot won't edit that article again for 30 days. To keep it off an article for good, add {{tlx|bots|deny{{=}}ParamBot}}.
+* '''Why did it edit this article?''' See the [[User:ParamBot/FAQ|FAQ]]. The ''rules'' link in each edit summary shows exactly which rules it used.
+* '''Want it to handle another template?''' Follow [[User:ParamBot/Rules/Instructions|the instructions]], or ask below.
+* '''Anything else''' is in the [[User:ParamBot/Documentation|documentation]]. The latest run's report is at [[User:ParamBot/Report]].
+}}
+{{Archives|auto=short}}

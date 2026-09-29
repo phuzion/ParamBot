@@ -1,6 +1,6 @@
 <includeonly>{{#if:{{{1|}}}
 |{{#if:{{{2|}}}
-  |'''[[Special:Permalink/{{{2}}}|{{{1}}}]]''' <small>(approved revision {{{2}}})</small>
+  |'''[[Special:Permalink/{{{2}}}|{{{1}}}]]''' <small {{#ifeq: {{REVISIONID:User:ParamBot/Rules/{{{1}}}}}|{{{2}}}| |style="color: red;"}}>(approved revision {{{2}}})</small>
   |'''{{{1}}}''' <span class="error">(no approved revision, so ParamBot isn't using these rules)</span>
   }} – [[User:ParamBot/Rules/{{{1}}}|current page]]{{#if:{{{2|}}}|&#32;· [[Special:Diff/{{{2}}}/cur|changes since approval]]}} · [[Template:{{{1}}}|template]]
 |<span class="error">A <code><nowiki>{{User:ParamBot/LinkRule}}</nowiki></code> is missing the template's name.</span>
@@ -18,6 +18,6 @@ Put one on each line under the <code>== Active ==</code> or <code>== Inactive ==
 To approve newer edits to a rules page, check them with the ''changes since approval'' link, then change the number to the page's latest revision.
 
 == Examples ==
-* {{User:ParamBot/LinkRule|Infobox station|1234567890}}
-* {{User:ParamBot/LinkRule|Infobox station}}
+* {{User:ParamBot/LinkRule|Infobox airport|1377354251}}
+* {{User:ParamBot/LinkRule|Infobox airport}}
 </noinclude>
