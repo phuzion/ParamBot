@@ -154,13 +154,14 @@ def _run(args: argparse.Namespace, wiki: Wiki) -> int:
 
 
 def _check_rules(args: argparse.Namespace, wiki: Wiki) -> int:
+    from . import messages as msg
     from .bot import ParamBot
 
     report = ParamBot(wiki, _options(args)).check_rules()
     for label, lines in (('SETUP  ', report.setup), ('PROBLEM', report.problems),
                          ('NOTE   ', report.notes)):
         for line in lines:
-            print(label, line)
+            print(label, msg.plain(line))
     return 1 if report.problems or report.setup else 0
 
 

@@ -3,6 +3,7 @@
   stop the bot (a message here does not), and archiving by lowercase
   sigmabot III. Keep its advice in step with docs/faq.mediawiki.
 -->
+{{User:ParamBot/Header}}
 {{User:MiszaBot/config
 | algo                = old(60d)
 | archive             = User talk:ParamBot/Archive %(counter)d

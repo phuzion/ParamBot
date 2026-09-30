@@ -128,7 +128,7 @@ BOT_DOC = (DOC_PATH.parent / 'documentation.mediawiki').read_text(encoding='utf-
 
 
 @pytest.mark.parametrize('name', ['documentation.mediawiki', 'faq.mediawiki',
-                                  'talk-page.mediawiki'])
+                                  'talk-page.mediawiki', 'header.mediawiki'])
 def test_documentation_contains_no_live_rules(name):
     text = (DOC_PATH.parent / name).read_text(encoding='utf-8')
     assert parse_config(text).rulesets == {}

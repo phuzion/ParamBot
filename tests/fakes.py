@@ -242,6 +242,7 @@ def bot_pages(options, **changes):
         options.report_page: FakePage(options.report_page, 'Placeholder.'),
         options.instructions_page: FakePage(options.instructions_page, 'Instructions.'),
         options.faq_page: FakePage(options.faq_page, 'Questions and answers.'),
+        options.header_page: FakePage(options.header_page, "Links to the bot's pages."),
         'Template:Infobox officeholder': FakePage('Template:Infobox officeholder',
                                                   OFFICEHOLDER_SOURCE),
     }

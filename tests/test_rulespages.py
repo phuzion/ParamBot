@@ -12,6 +12,7 @@ from fakes import (
     wiki_for,
 )
 
+from parambot.messages import plain
 from parambot.rulespages import Listed, read_index, read_rules_files, read_rules_pages, subpage
 
 OPTS = options()
@@ -26,6 +27,17 @@ def page(template):
 
 
 # -- the index -------------------------------------------------------------
+
+def test_every_rules_page_the_index_names_is_kept_for_the_report_to_link():
+    # Including Infobox housing project, whose revision the helper script left
+    # as "undefined", and a plain link.
+    listing = read_index('== Active ==\n' + link_rule('Infobox person', 103)
+                         + link_rule('Infobox housing project', 'undefined')
+                         + f'* [[{page("Infobox venue")}]]\n', OPTS)
+    assert set(listing.pages) == {page('Infobox person'), page('Infobox venue')}
+    assert listing.named == {page('Infobox person'), page('Infobox housing project'),
+                             page('Infobox venue')}
+
 
 def test_active_and_inactive_pages():
     listing = read_index(
@@ -62,15 +74,15 @@ def test_problems_with_the_index():
         + link_rule('Infobox twice', 3) + link_rule('Infobox twice', 4)
         + '== Archives ==\n'
         '* [[/Archive 1]]\n', OPTS)
-    assert listing.problems == [
+    assert [plain(p) for p in listing.problems] == [
         f'A {{{{{LINK_RULE}}}}} on the rules page doesn\'t name a template, so the bot ignored '
         f'it: {{{{{LINK_RULE}||2}}}}',
-        f'The approved revision given for {page("Infobox bad")} is "latest", which isn\'t a '
-        "revision number, so the bot isn't using its rules. Use the number from the page's "
+        'The approved revision given for the Infobox bad rules is "latest", which isn\'t a '
+        "revision number, so the bot isn't using them. Use the number from the page's "
         'history, such as the 1234567890 in Special:Permalink/1234567890.',
         f'{INDEX} has no "== Active ==" heading, so no rules are used.',
-        f'{INDEX} lists {page("Infobox twice")} more than once, with different approved '
-        "revisions (3 and 4), so the bot isn't using it. Keep one."]
+        f'{INDEX} lists the Infobox twice rules more than once, with different approved '
+        "revisions (3 and 4), so the bot isn't using them. Keep one."]
     # Listed, but without an approved revision; the loader reports those.
     assert listing.pages == {
         page('Infobox linked'): Listed(page('Infobox linked'), False, None),
@@ -82,8 +94,8 @@ def test_listed_under_both_headings_counts_as_inactive():
                          + link_rule('T', 1), OPTS)
     assert listing.pages == {page('T'): Listed(page('T'), False, 1)}
     assert listing.problems == [
-        f'{page("T")} is listed under both Active and Inactive on {INDEX}. Treating it as '
-        'inactive; take it off one of them.']
+        f'The T rules are listed under both Active and Inactive on {INDEX}. Treating them as '
+        'inactive; take them off one of the two.']
 
 
 @pytest.mark.parametrize('target, expected', [
@@ -141,8 +153,8 @@ def test_newer_edits_are_not_used_until_approved():
     assert config.rulesets['Infobox person'].renames['alma_mater'].new == 'education'
     assert config.problems == []
     assert config.notes == [
-        f'{page("Infobox person")} has changed since its approved revision ({PERSON_REVISION}); '
-        f'the bot is still using that one. Review the changes at '
+        f'The Infobox person rules have changed since their approved revision '
+        f'({PERSON_REVISION}); the bot is still using that one. Review the changes at '
         f'Special:Diff/{PERSON_REVISION}/2002, and if they\'re right, change the revision on '
         f'{INDEX} to 2002.']
 
@@ -156,16 +168,18 @@ def test_a_rules_page_needs_no_caption():
 
 
 @pytest.mark.parametrize('pinned, pages, expected', [
-    (9999, [person()], "Revision 9999, the approved revision of User:ExampleBot/Rules/Infobox "
-                       "person, doesn't exist or was deleted"),
+    (9999, [person()], "Revision 9999, the approved revision of the Infobox person rules, "
+                       "doesn't exist or was deleted"),
     (OFFICEHOLDER_REVISION, [person()],
      f'Revision {OFFICEHOLDER_REVISION} is a revision of User:ExampleBot/Rules/Infobox '
-     'officeholder, not of User:ExampleBot/Rules/Infobox person'),
+     'officeholder, not of the Infobox person rules'),
     (PERSON_REVISION, [person(revid=2002, history={PERSON_REVISION: None})],
-     f'The text of revision {PERSON_REVISION} of User:ExampleBot/Rules/Infobox person is hidden'),
-    (PERSON_REVISION, [person(model='json')], 'must be an ordinary wikitext page, not json'),
+     f'The text of revision {PERSON_REVISION} of the Infobox person rules is hidden'),
+    (PERSON_REVISION, [person(model='json')],
+     'The Infobox person rules page must be an ordinary wikitext page, not json'),
     (PERSON_REVISION, [person('Nothing yet.')],
-     f'Revision {PERSON_REVISION} of User:ExampleBot/Rules/Infobox person has no rules'),
+     f'Revision {PERSON_REVISION} of the Infobox person rules page has nothing the bot could '
+     'read'),
 ])
 def test_unusable_revisions(pinned, pages, expected):
     config = read(listing(('Infobox person', pinned)), *pages)
@@ -178,14 +192,14 @@ def test_pages_listed_without_a_revision():
     config = read(listing(('Infobox person', ''), ('Infobox missing', ''))
                   + '* [[/Infobox officeholder]]\n', person())
     assert config.rulesets == {}
-    assert config.problems == [
-        f"{page('Infobox person')} has no approved revision on {INDEX}, so the bot isn't using "
-        f'its rules. If its current version is right, list it as '
+    assert [plain(p) for p in config.problems] == [
+        f"The Infobox person rules have no approved revision on {INDEX}, so the bot isn't "
+        f'using them. If their current version is right, list them as '
         f'{{{{{LINK_RULE}|Infobox person|{PERSON_REVISION}}}}}.',
-        f'{page("Infobox missing")} is listed on {INDEX} but does not exist. Create it, or take '
-        'it off the list.',
-        f"{page('Infobox officeholder')} has no approved revision on {INDEX}, so the bot isn't "
-        f'using its rules. If its current version is right, list it as '
+        f'The Infobox missing rules are listed on {INDEX}, but their page does not exist. '
+        'Create it, or take it off the list.',
+        f"The Infobox officeholder rules have no approved revision on {INDEX}, so the bot isn't "
+        f'using them. If their current version is right, list them as '
         f'{{{{{LINK_RULE}|Infobox officeholder|{OFFICEHOLDER_REVISION}}}}}.']
 
 
@@ -206,7 +220,7 @@ def test_rules_written_on_the_index_are_ignored():
     assert set(config.rulesets) == {'Infobox officeholder'}
     [problem] = config.problems
     assert problem.startswith(f'{INDEX} has rules written on it (for Infobox person)')
-    assert f'list that page with {{{{{LINK_RULE}|Infobox person|REVISION}}}}' in problem
+    assert f'list that page with {{{{{LINK_RULE}|Infobox person|REVISION}}}}' in plain(problem)
 
 
 # -- local files -----------------------------------------------------------

@@ -3,6 +3,7 @@
   watch. Every ParamBot edit summary links here. This belongs on the wiki at
   [[User:ParamBot/FAQ]]; the full details are at [[User:ParamBot/Documentation]].
 -->
+{{User:ParamBot/Header}}
 '''ParamBot fixes infoboxes that were quietly broken by an old parameter name.'''
 
 == Why did ParamBot edit this article? ==

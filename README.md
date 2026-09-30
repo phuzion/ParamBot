@@ -53,7 +53,9 @@ replacement.
    rules only, then saves it, or writes a diff in a dry run.
 6. **Writes the report** to `User:ParamBot/Report`, listing articles that
    need human review, articles it skipped and why, and problems in the rules.
-   The report is only saved when its contents change.
+   It starts with `{{User:ParamBot/Header}}`, and links each rules page,
+   template and diff it names. The report is only saved when its contents
+   change.
 
 ## Safeguards
 
@@ -356,6 +358,9 @@ Toolforge chooses the time of day.
      [`docs/talk-page.mediawiki`](docs/talk-page.mediawiki); the FAQ sends
      people there to report bad edits
    - `User:ParamBot/Report`, a placeholder
+   - `User:ParamBot/Header`, a copy of
+     [`docs/header.mediawiki`](docs/header.mediawiki): the links across the
+     top of the bot's pages, which the bot puts at the top of the report
    - `User:ParamBot/Run`, containing `yes`
 
    Ask for `User:ParamBot/Rules` to be template-editor protected at
@@ -397,6 +402,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `docs/documentation.mediawiki` | Full documentation of the bot, for `User:ParamBot/Documentation`. |
 | `docs/faq.mediawiki` | A short FAQ, for `User:ParamBot/FAQ`, which every edit summary links to. |
 | `docs/talk-page.mediawiki` | The header of `User talk:ParamBot`, with archiving. |
+| `docs/header.mediawiki` | The `User:ParamBot/Header` template: links across the top of the bot's pages and the report. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job and Pywikibot config template. |

@@ -6,6 +6,7 @@
 
   Every <syntaxhighlight> example here is checked by tests/test_docs.py.
 -->
+{{User:ParamBot/Header}}
 '''ParamBot''' puts back template parameter renames that reverts have undone. When a template stops accepting an old parameter name and an edit brings that name back into an article, ParamBot renames it to the new name. It changes nothing else.
 
 {| class="wikitable"
@@ -193,7 +194,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 * the report shows no problems for the template, which is easiest to check by approving the new revision under Inactive first
 
 == The report ==
-[[User:ParamBot/Report]] is rewritten on every run that finds something different; if nothing has changed, it isn't saved, so its "Last run" line shows the last run with new findings. Its sections:
+[[User:ParamBot/Report]] is rewritten on every run that finds something different; if nothing has changed, it isn't saved, so its "Last run" line shows the last run with new findings. Wherever it names a rules page, a template or a diff, it links to it. Its sections:
 
 {| class="wikitable"
 ! Section !! What it lists !! What to do
@@ -208,7 +209,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 |-
 | ''Rules page problems'' || Anything in the rules the bot couldn't use, and how to fix it. || Fix the rules page it names, then approve the new revision.
 |-
-| ''Notes'' || Things worth knowing: inactive templates, rules pages changed since approval, and rules waiting because the template still accepts the old name. || Usually nothing.
+| ''Notes'' || Things worth knowing: inactive templates, rules pages changed since approval, rules waiting because the template still accepts the old name, and rules that aren't needed because the old name is a map parameter every template with <code>mapframe_args=y</code> accepts. || Usually nothing, but delete the rules that aren't needed.
 |}
 
 == Stopping it ==

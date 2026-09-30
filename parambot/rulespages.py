@@ -60,6 +60,8 @@ class Listing:
 
     pages: dict[str, Listed] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    # Every rules page the index names, usable or not, for the report to link.
+    named: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -78,7 +80,7 @@ def read_rules_pages(wiki: Wiki, index: WikiPage, options: Options) -> Config:
     """The approved revision of every rules page the index lists, read into
     one Config."""
     listing = read_index(index.text, options)
-    config = Config(problems=list(listing.problems))
+    config = Config(problems=list(listing.problems), pages=sorted(listing.named))
     written = parse_config(index.text)
     if written.rulesets or written.problems:
         config.problems.append(msg.rules_on_index(
@@ -98,7 +100,8 @@ def read_rules_pages(wiki: Wiki, index: WikiPage, options: Options) -> Config:
             continue
         page_config = parse_config(text, template_for(entry.title, options.rules_page))
         if not page_config.rulesets:
-            config.problems.append(msg.rules_page_empty(entry.title, entry.revision))
+            config.problems.append(msg.rules_page_empty(
+                template_for(entry.title, options.rules_page), entry.revision))
         log.debug('Read %s, revision %d (%s)', entry.title, entry.revision,
                   ACTIVE if entry.active else INACTIVE)
         sources.append(_Source(entry.title, page_config, entry.active, entry.revision))
@@ -107,9 +110,10 @@ def read_rules_pages(wiki: Wiki, index: WikiPage, options: Options) -> Config:
 
 def _unapproved(page: WikiPage, options: Options) -> str:
     """The problem with a rules page listed without an approved revision."""
+    template = template_for(page.title(), options.rules_page)
     if not page.exists():
-        return msg.rules_page_missing_from(page.title(), options.rules_page)
-    return msg.no_approved_revision(page.title(), options.rules_page, options.link_rule_page,
+        return msg.rules_page_missing_from(template, options.rules_page)
+    return msg.no_approved_revision(template, options.rules_page, options.link_rule_page,
                                     page.latest_revision_id)
 
 
@@ -118,19 +122,20 @@ def _approved_text(entry: Listed, revision: Revision | None, options: Options,
     """The text of a rules page's approved revision, if it can be used.
     Otherwise the reason goes on the report."""
     assert entry.revision is not None
+    template = template_for(entry.title, options.rules_page)
     if revision is None:
-        config.problems.append(msg.revision_missing(entry.title, entry.revision))
+        config.problems.append(msg.revision_missing(template, entry.revision))
     elif _canonical(revision.title) != _canonical(entry.title):
         config.problems.append(
-            msg.revision_of_another_page(entry.title, entry.revision, revision.title))
+            msg.revision_of_another_page(template, entry.revision, revision.title))
     elif revision.text is None:
-        config.problems.append(msg.revision_hidden(entry.title, entry.revision))
+        config.problems.append(msg.revision_hidden(template, entry.revision))
     elif revision.model != 'wikitext':
-        config.problems.append(msg.rules_page_not_wikitext(entry.title, revision.model))
+        config.problems.append(msg.rules_page_not_wikitext(template, revision.model))
     else:
         if revision.latest != entry.revision:
             config.notes.append(msg.newer_than_approved(
-                entry.title, entry.revision, revision.latest, options.rules_page))
+                template, entry.revision, revision.latest, options.rules_page))
         return revision.text
     return None
 
@@ -154,7 +159,7 @@ def read_index(text: str, options: Options) -> Listing:
         for call in section.filter_templates():
             if _canonical(str(call.name).lstrip(':')) != _canonical(options.link_rule_page):
                 continue
-            entry = _link_rule(call, options, listing.problems)
+            entry = _link_rule(call, options, listing)
             if entry is not None:
                 title, revision = entry
                 found.setdefault(title, set()).add(kind)
@@ -163,6 +168,7 @@ def read_index(text: str, options: Options) -> Listing:
         # so the report can say which revision to approve.
         for title in [*_linked(section, index), *_transcluded(section, index)]:
             if title != options.instructions_page:
+                listing.named.add(title)
                 found.setdefault(title, set()).add(kind)
                 revisions.setdefault(title, set())
     if ACTIVE not in headings:
@@ -170,29 +176,31 @@ def read_index(text: str, options: Options) -> Listing:
 
     for title, kinds in found.items():
         if kinds == {ACTIVE, INACTIVE}:
-            listing.problems.append(msg.listed_twice(title, index))
+            listing.problems.append(msg.listed_twice(template_for(title, index), index))
         if len(revisions[title]) > 1:
             given = sorted('none' if r is None else str(r) for r in revisions[title])
-            listing.problems.append(msg.two_revisions(title, index, given))
+            listing.problems.append(msg.two_revisions(template_for(title, index), index, given))
             continue
         revision = next(iter(revisions[title]), None)
         listing.pages[title] = Listed(title, kinds == {ACTIVE}, revision)
     return listing
 
 
-def _link_rule(call: Template, options: Options, problems: list[str]
+def _link_rule(call: Template, options: Options, listing: Listing
                ) -> tuple[str, int | None] | None:
-    """The rules page a LinkRule names, and the revision it approves."""
+    """The rules page a LinkRule names, and the revision it approves.  The
+    page goes in listing.named even if the revision is no good."""
     name = normalize_template_name(_param(call, '1').lstrip('/'))
     if not name:
-        problems.append(msg.link_rule_without_template(options.link_rule_page, call))
+        listing.problems.append(msg.link_rule_without_template(options.link_rule_page, call))
         return None
     title = f'{options.rules_page}/{name}'
+    listing.named.add(title)
     revision = _param(call, '2')
     if not revision:
         return title, None
     if not revision.isdigit():
-        problems.append(msg.not_a_revision(title, revision))
+        listing.problems.append(msg.not_a_revision(name, revision))
         return None
     return title, int(revision)
 

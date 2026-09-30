@@ -20,8 +20,10 @@ from fakes import (
     wiki_for,
 )
 
+from parambot import messages as msg
 from parambot.bot import MAX_FAILURES_IN_A_ROW, SUMMARY_LIMIT, ParamBot, StopRun, edit_summary
 from parambot.fixer import TemplateRules, fix_wikitext
+from parambot.messages import plain
 from parambot.rules import parse_config
 
 FIXED_TEXT = '{{Infobox officeholder\n| term_start = 2020\n}}'
@@ -65,7 +67,7 @@ def test_dry_run_proposes_fixes_without_editing(tmp_path):
     diff = only_diff(tmp_path)
     assert '-| termstart = 2020' in diff and '+| term_start = 2020' in diff
     assert '# Summary: Fixing deprecated parameters restored in' in diff
-    assert 'would have made (dry run) 1 edits' in only_report(tmp_path)
+    assert 'would have made (dry run) 1 edit.' in only_report(tmp_path)
 
 
 def test_sandbox_skipped_by_default(tmp_path):
@@ -130,7 +132,7 @@ def test_inactive_rules_are_checked_but_not_used(tmp_path):
     assert only_diff(tmp_path) == ''
     assert 'Inactive, so checked but not used: Infobox officeholder.' in report.notes
     # Checked like any other rules.
-    assert any('Check the spelling of "term_ending"' in p for p in report.problems)
+    assert any('Check the spelling of "term_ending"' in plain(p) for p in report.problems)
 
 
 def test_an_edit_to_a_rules_page_does_nothing_until_approved(tmp_path):
@@ -145,7 +147,10 @@ def test_an_edit_to_a_rules_page_does_nothing_until_approved(tmp_path):
     assert jane.saved == [FIXED_TEXT]      # by the approved rules
     assert report.problems == []           # the misspelt rule isn't read at all
     [saved] = wiki.page(opts.report_page).saved
-    assert f'{title} has changed since its approved revision ({OFFICEHOLDER_REVISION})' in saved
+    assert saved.startswith(f'{{{{{opts.header_page}}}}}\n<!--')
+    # The template's name, linked to its rules page.
+    assert (f'* The [[{title}|Infobox officeholder]] rules have changed since their approved '
+            f'revision ({OFFICEHOLDER_REVISION})') in saved
 
 
 def test_the_summary_links_to_the_index_when_two_rules_pages_were_used(tmp_path):
@@ -181,7 +186,7 @@ def test_nobots_is_respected(tmp_path):
     opts = options(out_dir=str(tmp_path))
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Excluded', may_edit=False))
     report = ParamBot(wiki, opts).run()
-    assert report.skipped == [('Excluded', 'excluded by {{bots}}/{{nobots}}')]
+    assert report.skipped == [('Excluded', msg.SKIP_EXCLUDED)]
 
 
 def test_no_second_edit_within_the_cooldown(tmp_path):
@@ -217,7 +222,8 @@ def test_error_on_one_page_is_reported_and_the_run_continues(tmp_path):
         OFFICEHOLDER_CATEGORY, article('A'), article('B', broken=True), article('C'))
     report = ParamBot(wiki, opts).run()
     assert report.edits == 2
-    assert report.skipped == [('B', 'error: ConnectionError: API timed out')]
+    assert [(title, plain(reason)) for title, reason in report.skipped] == [
+        ('B', 'error: ConnectionError: API timed out')]
 
 
 def test_repeated_errors_stop_the_run(tmp_path):
@@ -254,7 +260,7 @@ def test_live_run_edits_and_saves_the_report(tmp_path):
         f'([[Special:Permalink/{OFFICEHOLDER_REVISION}|rules]] · [[{FAQ}|FAQ]])']
     report_page = wiki.page(opts.report_page)
     assert len(report_page.saved) == 1
-    assert 'made 1 edits' in report_page.saved[0]
+    assert 'made 1 edit.' in report_page.saved[0]
     assert list(tmp_path.iterdir()) == []
 
 
@@ -359,7 +365,7 @@ def test_live_crash_saves_the_report_page(tmp_path):
     with pytest.raises(ConnectionError):
         ParamBot(wiki, opts).run()
     [saved] = wiki.page(opts.report_page).saved
-    assert 'ConnectionError: API down' in saved
+    assert 'ConnectionError: <nowiki>API down</nowiki>' in saved
     assert list(tmp_path.glob('report-*')) == []
 
 
@@ -370,7 +376,7 @@ def test_live_report_falls_back_to_a_local_file(tmp_path):
     wiki.fail_polling = ConnectionError('API down')
     with pytest.raises(ConnectionError):
         ParamBot(wiki, opts).run()
-    assert 'ConnectionError: API down' in only_report(tmp_path)
+    assert 'ConnectionError: <nowiki>API down</nowiki>' in only_report(tmp_path)
 
 
 def test_no_rules_is_reported(tmp_path):

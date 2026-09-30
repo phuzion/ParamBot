@@ -2,6 +2,7 @@ import pytest
 
 from parambot.rules import parse_config
 from parambot.templatescan import (
+    KnownParams,
     WrappedParams,
     Wrapper,
     _to_number_form,
@@ -58,6 +59,26 @@ def test_categories_in():
                          ' [[:Category:Other]] [[Not a category]]') == [
         'Category:Anatomy infobox template using unknown parameters', 'Category:Other']
     assert categories_in('Found _VALUE_, ') == []
+
+
+def test_why_a_name_is_accepted():
+    known = known_params(TEMPLATE)
+    assert 'coord' in known
+    assert known.added_by('coord') == 'mapframe_args'     # only because of mapframe_args=y
+    assert known.added_by('image_size') is None           # the template's own list
+    assert known.added_by('custom_label3_sec2') is None   # its own pattern
+    assert known.added_by('nonsense') is None             # not accepted at all
+    # Listed by the template itself as well: its own list wins.
+    listed = known_params('{{#invoke:Check for unknown parameters|check|mapframe_args=y| coord }}')
+    assert listed.added_by('coord') is None
+
+
+def test_why_a_wrapper_accepts_a_name():
+    inner = KnownParams({'birth_name'}, extras={'coord': 'mapframe_args'})
+    known = WrappedParams(wrapper_call(WRAPPER), inner)
+    assert known.added_by('coord') == 'mapframe_args'     # passed on to the map settings
+    assert known.added_by('service_years') is None        # the wrapper uses it itself
+    assert known.added_by('birth_name') is None
 
 
 def test_known_params_absent():

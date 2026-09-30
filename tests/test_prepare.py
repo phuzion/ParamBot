@@ -3,7 +3,9 @@
 import pytest
 from fakes import OFFICEHOLDER_SOURCE, FakePage, FakeWiki
 
+from parambot import messages as msg
 from parambot.fixer import fix_wikitext
+from parambot.messages import plain
 from parambot.prepare import category_problem, prepare, template_categories
 from parambot.report import Report
 from parambot.rules import parse_config
@@ -141,7 +143,7 @@ def test_a_wrapper_of_a_template_without_a_list_is_switched_off(person):
     wiki = FakeWiki(person, FakePage(MILITARY_PERSON, MILITARY_PERSON_SOURCE))
     prepared, report = run_prepare(wiki, military_person(('serviceyears', 'service_years')))
     assert prepared.ready == []
-    assert report.problems == [
+    assert [plain(p) for p in report.problems] == [
         'Template:Infobox military person has no list of accepted parameters the bot can read (a '
         '{{#invoke:Check for unknown parameters|check|...}} call), and neither does the template '
         'it passes its parameters on to (Template:Infobox person), so its rules are switched off.']
@@ -174,11 +176,42 @@ def test_rules_that_wait_and_rules_that_cannot_work():
     prepared, report = run_prepare(
         wiki, officeholder(('term_end', 'termend'), ('termstart', 'term_strat')))
     assert len(prepared.ready) == 1
-    assert report.notes == [
-        'Infobox officeholder: 1 rule(s) wait because the template still accepts the old name '
-        '(term_end). That is normal: they start working once the template drops those names. '
-        'If a rule is backwards, swap its names.']
-    assert any('Check the spelling of "term_strat"' in p for p in report.problems)
+    assert [plain(note) for note in report.notes] == [
+        'Infobox officeholder: 1 rule waits because the template still accepts its old name, '
+        '"term_end". That is normal: the rule starts working once the template drops that '
+        'name. If the rule is backwards, swap its names.']
+    assert any('Check the spelling of "term_strat"' in plain(p) for p in report.problems)
+
+
+def test_rules_for_map_parameters_the_check_adds_are_not_needed():
+    # Like Infobox monastery: mapframe_args=y makes the check accept coord,
+    # though nothing in the template's own code mentions it.
+    source = OFFICEHOLDER_SOURCE.replace('| name |', '| mapframe_args = y | name |')
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, source))
+    _, report = run_prepare(wiki, officeholder(
+        ('coord', 'coordinates'), ('id', 'coordinates'), ('term_end', 'term_start')))
+    assert [plain(note) for note in report.notes] == [
+        'Infobox officeholder: 1 rule waits because the template still accepts its old name, '
+        '"term_end". That is normal: the rule starts working once the template drops that '
+        'name. If the rule is backwards, swap its names.',
+        "Infobox officeholder: 2 rules aren't needed, because \"coord\" and \"id\" are map "
+        'parameters that Module:Check for unknown parameters accepts for any template with '
+        'mapframe_args=y. Delete the rules unless the template stops using mapframe_args.']
+    assert report.problems == []
+
+
+def test_one_rule_that_is_not_needed():
+    assert plain(msg.rules_not_needed('Infobox monastery', ['coord'], 'mapframe_args')) == (
+        "Infobox monastery: 1 rule isn't needed, because \"coord\" is one of the map parameters "
+        'that Module:Check for unknown parameters accepts for any template with '
+        'mapframe_args=y. Delete the rule unless the template stops using mapframe_args.')
+
+
+def test_several_waiting_rules_are_counted_properly():
+    assert plain(msg.rules_waiting('T', ['a', 'b'])) == (
+        'T: 2 rules wait because the template still accepts their old names, "a" and "b". '
+        'That is normal: they start working once the template drops those names. If a rule '
+        'is backwards, swap its names.')
 
 
 def test_wrong_category_is_reported_and_remembered():
@@ -244,20 +277,20 @@ def test_category_matches():
 
 
 def test_category_differs_from_the_default():
-    problem = category_problem(_bone(), [ANATOMY])
+    problem = plain(category_problem(_bone(), [ANATOMY]))
     assert 'not the usual Category:Pages using infobox bone with unknown parameters' in problem
     assert f'Add [[:{ANATOMY}]] to the caption of the Infobox bone table' in problem
 
 
 def test_category_differs_from_the_caption():
-    problem = category_problem(_bone('Category:Typo category'), [ANATOMY])
+    problem = plain(category_problem(_bone('Category:Typo category'), [ANATOMY]))
     assert 'caption says to watch Category:Typo category' in problem
     assert f"Change the caption's category link to [[:{ANATOMY}]]" in problem
 
 
 def test_one_line_rules_are_told_to_use_a_table():
     rules = parse_config('* {{AWB rename template parameter|Infobox bone|a|b}}')
-    problem = category_problem(rules.rulesets['Infobox bone'], [ANATOMY])
+    problem = plain(category_problem(rules.rulesets['Infobox bone'], [ANATOMY]))
     assert "One-line rules can't name a category" in problem
     assert f'a table with [[:{ANATOMY}]] in its caption' in problem
 

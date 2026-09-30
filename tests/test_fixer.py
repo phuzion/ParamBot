@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from parambot.fixer import TemplateRules, fix_wikitext
+from parambot.messages import plain
 from parambot.rules import parse_config
 from parambot.templatescan import KnownParams
 
@@ -269,7 +270,7 @@ def test_known_params_target_not_accepted(targets):
     targets = with_settlement(targets, known=KnownParams({'caption'}))
     r = fix('{{Infobox settlement|imagesize=1}}', targets)
     assert not r.changed
-    assert 'does not accept "image_size"' in r.issues[0].reason
+    assert 'does not accept "image_size"' in plain(r.issues[0].reason)
 
 
 def test_idempotent(targets):
@@ -293,5 +294,5 @@ def test_two_number_rules_for_one_name_are_left_for_a_human():
     assert r.text == '{{T|image13=a.jpg|photo2=b.jpg}}'
     [issue] = r.issues
     assert (issue.param, issue.target) == ('image13', None)
-    assert issue.reason.startswith(
-        'more than one "#" rule matches it (image1# → picture#; image# → photo#)')
+    assert plain(issue.reason).startswith(
+        'more than one "#" rule matches it ("image1#" → "picture#"; "image#" → "photo#")')

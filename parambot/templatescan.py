@@ -55,6 +55,9 @@ PUSHPIN_MAP_PARAMS = frozenset('''
     pushpin_mark_size pushpin_alt pushpin_background pushpin_map_size
 '''.split())
 
+# The settings that make the unknown-parameter check accept those names.
+_EXTRA_PARAMS = {'mapframe_args': MAPFRAME_PARAMS, 'pushpin_map_args': PUSHPIN_MAP_PARAMS}
+
 _UNKNOWN_MODULE = 'Check for unknown parameters'
 _DEPRECATED_MODULE = 'Check for deprecated parameters'
 _WRAPPER_MODULE = 'Template wrapper'
@@ -66,21 +69,35 @@ _WRAPPER_SETTINGS = ('_template', '_exclude', '_reuse', '_include-positional', '
 class KnownParams:
     """The parameters a template accepts, per its unknown-parameter check.
 
-    ``unknown_text`` is the check's raw ``unknown=`` wikitext, which holds
-    the category link for pages with unknown parameters."""
+    ``names`` and ``patterns`` are the check's own list.  ``extras`` are the
+    names the module adds for a setting such as ``mapframe_args=y``, with that
+    setting: {name: setting}.  ``unknown_text`` is the check's raw
+    ``unknown=`` wikitext, which holds the category link for pages with
+    unknown parameters."""
 
     def __init__(self, names: Iterable[str] = (), patterns: Iterable[LuaPattern] = (),
-                 unknown_text: str | None = None) -> None:
+                 unknown_text: str | None = None,
+                 extras: Mapping[str, str] | None = None) -> None:
         self.names = set(names)
         self.patterns = list(patterns)
         self.unknown_text = unknown_text
+        self.extras = dict(extras or {})
 
     def __repr__(self) -> str:
-        return f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns)'
+        return (f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns, '
+                f'{len(self.extras)} extras)')
 
     def __contains__(self, name: object) -> bool:
-        return isinstance(name, str) and (
-            name in self.names or any(p.fullmatch(name) for p in self.patterns))
+        return isinstance(name, str) and (name in self.extras or self._listed(name))
+
+    def added_by(self, name: str) -> str | None:
+        """The setting, such as mapframe_args, that is the only reason the
+        template accepts name.  None if its own list accepts it, or nothing
+        does."""
+        return None if self._listed(name) else self.extras.get(name)
+
+    def _listed(self, name: str) -> bool:
+        return name in self.names or any(p.fullmatch(name) for p in self.patterns)
 
     # For WrappedParams.  A template that checks its own parameters sees an
     # article's names as they are, and gets no settings from a wrapper.
@@ -147,6 +164,10 @@ class WrappedParams(KnownParams):
             return False
         passed = self.wrapper.passes(name)
         return passed is None or passed in self.inner
+
+    def added_by(self, name: str) -> str | None:
+        passed = self.wrapper.passes(name)
+        return None if passed is None else self.inner.added_by(passed)
 
     def _passed_on(self, name: str) -> str | None:
         passed = self.wrapper.passes(name)
@@ -233,10 +254,9 @@ def known_params(source: str) -> KnownParams | None:
                     known.patterns.append(LuaPattern(value))
                 except LuaPatternError:
                     return None  # a pattern we can't read might cover anything
-            elif key == 'mapframe_args' and value:
-                known.names |= MAPFRAME_PARAMS
-            elif key == 'pushpin_map_args' and value:
-                known.names |= PUSHPIN_MAP_PARAMS
+            elif key in _EXTRA_PARAMS and value:
+                for extra in _EXTRA_PARAMS[key]:
+                    known.extras.setdefault(extra, key)
     return known
 
 

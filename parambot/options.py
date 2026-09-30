@@ -40,6 +40,11 @@ class Options:
         return f'User:{self.bot_user}/FAQ'
 
     @property
+    def header_page(self) -> str:
+        """The links across the top of the bot's pages, and of the report."""
+        return f'User:{self.bot_user}/Header'
+
+    @property
     def link_rule_page(self) -> str:
         """The template the rules page lists each rules page with."""
         return f'User:{self.bot_user}/LinkRule'

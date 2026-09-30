@@ -1,3 +1,4 @@
+from parambot.messages import plain
 from parambot.rules import REMOVE, parse_config
 
 # The Infobox officeholder list as it was pasted in, plus a caption.
@@ -245,7 +246,7 @@ def test_rows_that_disagree_are_not_used():
     rs = config.rulesets['T']
     assert [rs.lookup(name) for name in ('a', 'gone', 'n', 'n2')] == [None] * 4
     assert rs.lookup('kept').target == 'fine'     # the same rule twice is fine
-    assert config.problems == [
+    assert [plain(p) for p in config.problems] == [
         'T: "a" is renamed to both "b" and "c", so the bot uses neither. Delete the wrong row.',
         'T: one row renames "gone" to "here" and another removes it, so the bot uses neither. '
         'Delete the wrong row.',
@@ -277,7 +278,7 @@ def test_rows_that_disagree_about_merging_are_not_merged():
     assert rs.renames['alma_mater'].conflict == 'skip'
     assert rs.renames['other_name'].conflict == 'skip'
     assert rs.renames['alma_mater'].new == 'education'   # still renamed
-    assert config.problems == [
+    assert [plain(p) for p in config.problems] == [
         'Infobox person: only some of the rows for "alma_mater" say merge, so the bot won\'t '
         'merge it. Make the rows agree.',
         'Infobox person: only some of the rows for "other_name" say merge, so the bot won\'t '
@@ -350,7 +351,7 @@ def test_problems_for_common_mistakes():
 |}
 * {{AWB rename template parameter|T|only two}}
 ''')
-    problems = config.problems
+    problems = [plain(p) for p in config.problems]
 
     def one(fragment):
         found = [p for p in problems if fragment in p]
@@ -359,7 +360,7 @@ def test_problems_for_common_mistakes():
 
     one('has no caption naming its template')
     one('"empty_new" has no new name')
-    one('more than one new name (x, y)')
+    one('more than one new name ("x" and "y")')
     one('"numbered#" → "not_numbered" has "#" in only one of the names')
     one('says "fight"')
     one('a new name but no old name')

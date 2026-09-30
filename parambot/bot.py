@@ -14,9 +14,9 @@ from .botpages import check_bot_pages
 from .fixer import FixResult, TemplateRules, fix_wikitext
 from .options import Options
 from .prepare import Prepared, prepare
-from .report import Report
+from .report import Links, Report
 from .rules import Config, RuleSet
-from .rulespages import read_rules_files, read_rules_pages
+from .rulespages import read_rules_files, read_rules_pages, template_for
 from .wiki import Wiki, WikiPage
 from .wikitext import normalize_template_name, normalize_title, strip_comments
 
@@ -43,7 +43,8 @@ class ParamBot:
     def __init__(self, wiki: Wiki, options: Options) -> None:
         self.wiki = wiki
         self.options = options
-        self.report = Report()
+        self.report = Report(header=options.header_page, links=Links(
+            index=options.rules_page, other=(msg.PROTECTION_REQUESTS, msg.UNKNOWN_CHECK)))
         self.diffs: list[str] = []
         self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
 
@@ -93,7 +94,7 @@ class ParamBot:
         if problems and options.live:
             raise StopRun(msg.pages_not_ready(problems))
         for problem in problems:
-            log.warning('A live run would refuse to start: %s', problem)
+            log.warning('A live run would refuse to start: %s', msg.plain(problem))
         self.report.setup.extend(problems)
 
     def _run(self) -> None:
@@ -145,6 +146,8 @@ class ParamBot:
         """The rule sets to check, active and inactive, with the rules pages'
         problems put on the report."""
         config = self._load_config()
+        self.report.links.rules_pages = {
+            template_for(title, self.options.rules_page): title for title in config.pages}
         self.report.problems.extend(config.problems)
         self.report.notes.extend(config.notes)
         if not config.rulesets:
@@ -305,7 +308,7 @@ class ParamBot:
             log.info('Saved %s', title)
 
     def _skip(self, title: str, reason: str) -> None:
-        log.info('Not editing %s: %s', title, reason)
+        log.info('Not editing %s: %s', title, msg.plain(reason))
         self.report.skip(title, reason)
 
     def _recent_bot_edit(self, page: WikiPage) -> datetime | None:

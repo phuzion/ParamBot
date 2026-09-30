@@ -4,10 +4,12 @@ import pytest
 from fakes import FakePage, options, wiki_for
 
 from parambot.botpages import check_bot_pages, protection_expiry, too_weak
+from parambot.messages import plain
 
 OPTS = options()
 RULES, RUN, REPORT = OPTS.rules_page, OPTS.run_page, OPTS.report_page
 INSTRUCTIONS, LINK_RULE, FAQ = OPTS.instructions_page, OPTS.link_rule_page, OPTS.faq_page
+HEADER = OPTS.header_page
 
 
 def check(opts=OPTS, **changes):
@@ -19,7 +21,7 @@ def test_correctly_set_up_pages_pass():
     result, wiki = check()
     assert (result.problems, result.notes) == ([], [])
     assert set(wiki.loaded_titles) == {'User:ExampleBot', RULES, RUN, REPORT, INSTRUCTIONS,
-                                       LINK_RULE, FAQ}
+                                       LINK_RULE, FAQ, HEADER}
 
 
 @pytest.mark.parametrize('protection, expected', [
@@ -84,7 +86,7 @@ def test_local_rules_file_skips_the_rules_page(tmp_path):
 def test_broken_pages_are_problems(title, page, expected):
     result, _ = check(**{title: page})
     [problem] = result.problems
-    assert expected in problem
+    assert expected in plain(problem)
 
 
 def test_live_run_checks_the_bot_can_edit_the_report():
@@ -95,7 +97,7 @@ def test_live_run_checks_the_bot_can_edit_the_report():
 
 def test_protected_run_page_and_missing_helper_pages_are_notes():
     result, _ = check(**{RUN: FakePage(RUN, 'yes', protection={'edit': ('sysop', 'infinity')}),
-                         INSTRUCTIONS: None, LINK_RULE: None, FAQ: None})
+                         INSTRUCTIONS: None, LINK_RULE: None, FAQ: None, HEADER: None})
     assert result.problems == []
     notes = '\n'.join(result.notes)
     assert "most editors can't use it to stop the bot" in notes
@@ -103,3 +105,5 @@ def test_protected_run_page_and_missing_helper_pages_are_notes():
     assert f'{LINK_RULE} (the template that shows the list of rules pages) does not exist' \
         in notes
     assert f'{FAQ} (the FAQ every edit summary links to) does not exist' in notes
+    assert f"{HEADER} (the links across the top of the bot's pages and the report) does not " \
+        'exist' in notes

@@ -110,9 +110,21 @@ def _check(found: _Found, categories: list[str] | None, report: Report,
     if problem:
         report.problems.append(problem)
         prepared.wrong_category.add(template)
-    waiting = [name for name in (*ruleset.renames, *ruleset.removes) if name in known]
+    # Rules for names the template still accepts wait for it to drop them,
+    # unless only a setting like mapframe_args=y makes the check accept them.
+    waiting: list[str] = []
+    not_needed: dict[str, list[str]] = {}   # {setting: names}
+    for name in (*ruleset.renames, *ruleset.removes):
+        if name in known:
+            setting = known.added_by(name)
+            if setting:
+                not_needed.setdefault(setting, []).append(name)
+            else:
+                waiting.append(name)
     if waiting:
         report.notes.append(msg.rules_waiting(template, waiting))
+    for setting, names in not_needed.items():
+        report.notes.append(msg.rules_not_needed(template, names, setting))
     for rule in ruleset.renames.values():
         if rule.new is not None and rule.new not in known:
             report.problems.append(msg.target_not_accepted(template, rule.old, rule.new))

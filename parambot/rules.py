@@ -90,9 +90,10 @@ class Rule:
     separator: str = DEFAULT_SEPARATOR   # between merged values
 
     def describe(self) -> str:
+        """The rule, for a message."""
         if self.kind == REMOVE:
-            return f'remove {self.old}'
-        return f'{self.old} → {self.new}'
+            return f'remove {msg.para(self.old)}'
+        return f'{msg.para(self.old)} → {msg.para(self.new)}'
 
 
 @dataclass
@@ -188,6 +189,7 @@ class Config:
     rulesets: dict[str, RuleSet] = field(default_factory=dict)   # by template name
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    pages: list[str] = field(default_factory=list)   # the rules pages the index names
 
 
 def parse_config(text: str, template: str | None = None) -> Config:
