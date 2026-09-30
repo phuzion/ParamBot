@@ -42,7 +42,7 @@
 | Yes: {{tlx|bots|deny{{=}}ParamBot}} and {{tlx|nobots}}
 |-
 ! Source code
-| [https://github.com/phuzion/ParamBot github.com/phuzion/ParamBot] (Python, with [[mw:Manual:Pywikibot|Pywikibot]] and mwparserfromhell)
+| [https://github.com/phuzion/ParamBot github.com/phuzion/ParamBot] (currently private) (Python, with [[mw:Manual:Pywikibot|Pywikibot]] and mwparserfromhell)
 |-
 ! Requested at
 | [[Wikipedia:Bot requests#Bot to regularly check for restored deprecated parameters|Bot requests: Bot to regularly check for restored deprecated parameters]]
