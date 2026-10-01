@@ -3,6 +3,7 @@
 import difflib
 import logging
 import os
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ RUN_VALUES = {'yes', 'true', 'run', 'on'}
 REPORT_VALUES = {'report'}   # lets a report-only run go ahead, but nothing else
 # More edits than this in one run gets a note on the report, to be checked.
 LARGE_RUN = 500
+_clock = time.monotonic   # seconds; tests replace it
 MAX_FAILURES_IN_A_ROW = 5
 
 
@@ -50,6 +52,7 @@ class ParamBot:
             index=options.rules_page, other=(msg.PROTECTION_REQUESTS, msg.UNKNOWN_CHECK)))
         self.diffs: list[str] = []
         self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
+        self._started = _clock()
 
     # -- a run -------------------------------------------------------------
 
@@ -248,6 +251,9 @@ class ParamBot:
             if self.options.max_edits is not None and self.report.edits >= self.options.max_edits:
                 self.report.notes.append(msg.stopped_at_max_edits(self.options.max_edits))
                 break
+            if self._out_of_time():
+                self.report.notes.append(msg.stopped_at_max_hours(self.options.max_hours or 0))
+                break
             candidate = candidates.get(page.title())
             if candidate is None:
                 log.warning('Loaded unexpected page %s', page.title())
@@ -288,6 +294,13 @@ class ParamBot:
         else:
             self._record_diff(title, page.text, result.text, summary)
             self.report.edits += 1
+
+    def _out_of_time(self) -> bool:
+        """Whether the run has used up --max-hours."""
+        hours = self.options.max_hours
+        if not hours:
+            return False
+        return (_clock() - self._started) / 3600 >= hours
 
     def _rules_link(self, result: FixResult, targets: list[TemplateRules]) -> str:
         """What an edit summary links to: the approved revision of the rules

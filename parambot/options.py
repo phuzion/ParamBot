@@ -17,6 +17,9 @@ class Options:
     # a bot's own userspace without approval.
     report_only: bool = False
     max_edits: int | None = None    # stop after this many edits; None: no limit
+    # Stop starting new work after this many hours, so that a daily run
+    # can't still be going when the next one starts.  0 or None: no limit.
+    max_hours: float | None = 20
     cooldown_days: int = 30         # don't edit a page the bot edited this recently
     namespaces: tuple[int, ...] = (0,)
     templates: tuple[str, ...] = ()  # only these templates' rules

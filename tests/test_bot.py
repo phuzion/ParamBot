@@ -119,6 +119,29 @@ def test_max_edits(tmp_path):
     assert report.notes[-1] == 'Stopped after 2 edits (--max-edits).'
 
 
+def _clock_an_hour_a_read(monkeypatch):
+    hours = iter(range(1000))
+    monkeypatch.setattr('parambot.bot._clock', lambda: next(hours) * 3600)
+
+
+def test_a_run_stops_starting_new_work_after_max_hours(tmp_path, monkeypatch):
+    # So that a daily run can't still be going when the next one starts.
+    _clock_an_hour_a_read(monkeypatch)
+    opts = options(out_dir=str(tmp_path), max_hours=2.5)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(5)))
+    report = ParamBot(wiki, opts).run()
+    assert report.edits == 2     # an hour in, then two: the third would be 3 hours in
+    assert any(plain(note).startswith('Stopped after 2.5 hours (--max-hours), so that the '
+                                      "next run doesn't start") for note in report.notes)
+
+
+def test_max_hours_0_means_no_time_limit(tmp_path, monkeypatch):
+    _clock_an_hour_a_read(monkeypatch)
+    opts = options(out_dir=str(tmp_path), max_hours=0)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(5)))
+    assert ParamBot(wiki, opts).run().edits == 5
+
+
 def test_no_edit_limit_unless_one_is_given(tmp_path):
     opts = options(out_dir=str(tmp_path))
     assert opts.max_edits is None

@@ -59,6 +59,11 @@ def test_no_edit_limit_by_default():
     assert _options(_build_parser().parse_args(['run'])).max_edits is None
 
 
+def test_a_run_stops_after_20_hours_by_default():
+    assert _options(_build_parser().parse_args(['run'])).max_hours == 20
+    assert _options(_build_parser().parse_args(['run', '--max-hours', '0'])).max_hours == 0
+
+
 def test_report_only_option():
     opts = _options(_build_parser().parse_args(['run', '--report-only']))
     assert opts.report_only and opts.saves_report and not opts.edits_articles

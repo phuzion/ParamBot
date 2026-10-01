@@ -148,7 +148,7 @@ def test_wikitext_in_an_unmarked_message_does_nothing(wikitext):
 
 def _every_message():
     """(name, text) for every message function, called with sample arguments."""
-    samples = {str: 'Infobox person', int: 7, bool: True, list[str]: ['a', 'b'],
+    samples = {str: 'Infobox person', int: 7, float: 1.5, bool: True, list[str]: ['a', 'b'],
                Exception: ValueError('boom'), object: 'something'}
     skip = {'edit_summary', 'report_summary', 'excerpt', 'count', 'para', 'tl', 'code',
             'quoted', 'plain'}

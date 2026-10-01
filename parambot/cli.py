@@ -80,6 +80,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument('--max-edits', type=int, default=None,
                      help='stop after this many edits, such as for a BRFA trial '
                           '(default: no limit)')
+    run.add_argument('--max-hours', type=float, default=20,
+                     help='stop starting new work after this many hours, so a daily run '
+                          'is done before the next starts (default: 20; 0 = no limit)')
     run.add_argument('--cooldown-days', type=int, default=30,
                      help="don't repeat a fix on a page the bot edited this recently (0 = off)")
     run.add_argument('--template', action='append', default=[],
@@ -115,6 +118,7 @@ def _options(args: argparse.Namespace) -> Options:
         trial=args.trial,
         report_only=args.report_only,
         max_edits=args.max_edits,
+        max_hours=args.max_hours,
         cooldown_days=args.cooldown_days,
         templates=tuple(args.template),
         pages=tuple(args.page),

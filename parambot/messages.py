@@ -490,6 +490,12 @@ def large_run(edits: int, limit: int, made: bool) -> str:
             'but check the newest rules in case one is catching more than it should.')
 
 
+def stopped_at_max_hours(hours: float) -> str:
+    unit = 'hour' if hours == 1 else 'hours'
+    return (f"Stopped after {hours:g} {unit} (--max-hours), so that the next run doesn't start "
+            'while this one is still going. It will pick up the articles that are left.')
+
+
 def stopped_at_max_edits(max_edits: int) -> str:
     return f'Stopped after {count(max_edits, "edit")} (--max-edits).'
 

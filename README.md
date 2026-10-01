@@ -131,6 +131,9 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   more than 500 edits gets a note on the report, so a rule that catches more
   than it should is noticed. `--max-edits N` sets a limit, for example for a
   BRFA trial.
+- **Runs end within a day.** A run stops starting new work after 20 hours
+  (`--max-hours`), so a daily run is done before the next one starts. What's
+  left is picked up the next day.
 - **Gentle on the API.** Every read waits at least a second after the last
   one (`READ_DELAY` in `cli.py`), so the bot can't make more than 3,600 an
   hour, and edits are at least 10 seconds apart. Nothing is asked once per
@@ -309,6 +312,7 @@ Options for `run`:
 | `--trial` | off | Allow `--live` without the bot flag, for BRFA trial edits. |
 | `--report-only` | off | Save `User:ParamBot/Report` and never edit anything else, even with `--live`. Works out every fix like a dry run, and writes the edits it would make to a file. Needs no bot flag: the bot policy lets a bot edit its own userspace without approval. It needs a full run, so it can't be combined with `--page`, `--template`, `--any-namespace`, `--rules-file` or another `--report-page`, and it carries on past setup problems, to put them on the report. |
 | `--max-edits N` | none | Stop after this many edits, for example for a BRFA trial. |
+| `--max-hours H` | 20 | Stop starting new work after this many hours, so a daily run is done before the next starts. `0` means no limit. |
 | `--cooldown-days N` | 30 | Don't edit a page the bot edited this recently. `0` turns this off. |
 | `--template NAME` | all | Only use this template's rules. Can be repeated. |
 | `--page TITLE` | | Only check this page, skipping the categories. Can be repeated. |
