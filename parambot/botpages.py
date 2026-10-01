@@ -3,7 +3,8 @@
 A live run refuses to start unless these are set up properly:
 
 - User:<bot> uses {{bot}} to name the operator, as bot policy requires;
-- the rules page is template-editor protected or higher, because it says
+- the rules page is protected at least as much as the rules protection
+  setting asks (template editor, unless it's changed), because it says
   which rules the bot uses;
 - the Run page exists (it's deliberately left open, so anyone can stop the bot);
 - the report page exists and the bot can edit it.
@@ -16,19 +17,19 @@ page says which revision of each to use (see rulespages).
 from dataclasses import dataclass, field
 
 from . import messages as msg
-from .options import Options
+from .options import PROTECTION_LEVELS, Options
 from .wiki import Wiki, WikiPage
 
-# Edit protection levels on the English Wikipedia, and what they're called.
+# What the edit protection levels are called.
 PROTECTION_NAMES = {
     'autoconfirmed': 'semi-protected',
     'extendedconfirmed': 'extended-confirmed protected',
     'templateeditor': 'template-editor protected',
     'sysop': 'fully protected',
 }
-# The rules pages decide what the bot edits, so only people trusted to edit
-# high-risk templates may change them.
-RULES_PROTECTION = {'templateeditor', 'sysop'}
+# Protection that only template editors and admins can edit through: not
+# most editors, and not the bot.
+HIGH_PROTECTION = {'templateeditor', 'sysop'}
 INDEFINITE = {'infinity', 'infinite', 'indefinite', 'never'}
 
 
@@ -54,12 +55,12 @@ def check_bot_pages(wiki: Wiki, options: Options) -> PageCheck:
     if not options.rules_files:
         rules_page = _usable(pages[options.rules_page], 'the rules page', check)
         if rules_page is not None:
-            _check_rules_protection(rules_page, check)
+            _check_rules_protection(rules_page, options.rules_protection, check)
         if not pages[options.link_rule_page].exists():
             check.notes.append(msg.link_rule_missing(options.link_rule_page))
 
     run_page = _usable(pages[options.run_page], 'the Run page', check)
-    if run_page is not None and _edit_level(run_page) in RULES_PROTECTION:
+    if run_page is not None and _edit_level(run_page) in HIGH_PROTECTION:
         check.notes.append(msg.run_page_protected(
             options.run_page, PROTECTION_NAMES[_edit_level(run_page)]))
 
@@ -76,13 +77,20 @@ def check_bot_pages(wiki: Wiki, options: Options) -> PageCheck:
     return check
 
 
-def too_weak(page: WikiPage) -> str | None:
-    """How the page is protected, if that's too weak for a rules page, such
-    as "not protected" or "semi-protected"; None if it's strong enough."""
+def too_weak(page: WikiPage, required: str) -> str | None:
+    """How the page is protected, if that's weaker than the required level,
+    such as "not protected" or "semi-protected"; None if it's strong enough."""
     level = _edit_level(page)
-    if level in RULES_PROTECTION:
+    if level in PROTECTION_LEVELS and (
+            PROTECTION_LEVELS.index(level) >= PROTECTION_LEVELS.index(required)):
         return None
     return PROTECTION_NAMES.get(level, f'{level} protected') if level else 'not protected'
+
+
+def needed_protection(required: str) -> str:
+    """The protection the rules page needs, in words."""
+    name = PROTECTION_NAMES[required]
+    return name if required == PROTECTION_LEVELS[-1] else f'{name} or higher'
 
 
 def protection_expiry(page: WikiPage) -> str | None:
@@ -114,10 +122,11 @@ def _edit_level(page: WikiPage) -> str:
     return _edit_protection(page)[0]
 
 
-def _check_rules_protection(page: WikiPage, check: PageCheck) -> None:
-    current = too_weak(page)
+def _check_rules_protection(page: WikiPage, required: str, check: PageCheck) -> None:
+    current = too_weak(page, required)
     if current is not None:
-        check.problems.append(msg.rules_page_unprotected(page.title(), current))
+        check.problems.append(msg.rules_page_unprotected(page.title(), current,
+                                                         needed_protection(required)))
     elif (expiry := protection_expiry(page)) is not None:
         check.notes.append(msg.rules_protection_expires(page.title(), expiry))
 
@@ -127,6 +136,6 @@ def _check_report_editable(page: WikiPage, options: Options, check: PageCheck) -
         # Logged in, so the wiki can say whether the bot account may edit it.
         if not page.has_permission('edit'):
             check.problems.append(msg.report_page_not_editable(options.bot_user, page.title()))
-    elif _edit_level(page) in RULES_PROTECTION:
+    elif _edit_level(page) in HIGH_PROTECTION:
         check.problems.append(msg.report_page_protected(
             page.title(), PROTECTION_NAMES[_edit_level(page)]))

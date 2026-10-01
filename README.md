@@ -101,7 +101,7 @@ stopping.
 | Page | Must be |
 |---|---|
 | `User:ParamBot` | an existing wikitext page that uses `{{bot}}` to name the operator, as bot policy requires |
-| `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher**, listing the rules pages and their approved revisions |
+| `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher** (or what `[rules] protection` in the [settings](#settings) asks), listing the rules pages and their approved revisions |
 | `User:ParamBot/Run` | an existing wikitext page, not a redirect, saying `yes` (or `report`, for a report-only run) |
 | `User:ParamBot/Report` | an existing wikitext page, not a redirect, that the bot account can edit |
 
@@ -128,15 +128,15 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   it makes no more wiki edits, not even the report, which is written to a
   local file instead.
 - **Large runs are flagged.** There's no limit on edits per run, but a run of
-  more than 500 edits gets a note on the report, so a rule that catches more
-  than it should is noticed. `--max-edits N` sets a limit, for example for a
-  BRFA trial.
+  more than 500 edits (`large_run`) gets a note on the report, so a rule that
+  catches more than it should is noticed. `max_edits`, or `--max-edits N`,
+  sets a limit, for example for a BRFA trial.
 - **Runs end within a day.** A run stops starting new work after 20 hours
-  (`--max-hours`), so a daily run is done before the next one starts. What's
+  (`max_hours`), so a daily run is done before the next one starts. What's
   left is picked up the next day.
 - **Gentle on the API.** Every read waits at least a second after the last
-  one (`READ_DELAY` in `cli.py`), so the bot can't make more than 3,600 an
-  hour, and edits are at least 10 seconds apart. Nothing is asked once per
+  one (`read_delay`), so the bot can't make more than 3,600 an hour, and edits
+  are at least 10 seconds apart (Pywikibot's `put_throttle`). Nothing is asked once per
   article or per template: pages, their templates, redirects, categories and
   expansions go 50 to a request, and the cooldown comes from one look at the
   bot's own recent edits. A run needs about 25 reads, plus about one for each
@@ -238,7 +238,8 @@ wiki as exactly what the bot will do:
   also work.
 
 The bot won't run unless `User:ParamBot/Rules` is template-editor protected
-or higher, so only template editors can approve rules. Even so, the
+or higher (the `[rules] protection` setting), so only template editors can
+approve rules. Even so, the
 safeguards limit what a bad rule can do, because the old name has to be one
 the template rejects and the new name one it accepts.
 
@@ -288,7 +289,7 @@ parambot scaffold "Infobox settlement"
 
 | Command | What it does |
 |---|---|
-| `run` | A dry run by default: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.mediawiki` instead of editing. |
+| `run` | Does what `mode` in the [settings](#settings) says. Without one, that's a dry run: it reads the wiki, then writes `out/edits-*.diff` and `out/report-*.mediawiki` instead of editing. |
 | `run --live` | Edits for real. Needs a bot account and a `user-config.py` (see [Deploying](#deploying-on-toolforge)). |
 | `check-rules` | Checks the bot's own pages, then every rule, active and inactive, against its template and category, without looking at any articles. Exits 1 if there are problems. |
 | `scaffold TEMPLATE` | Prints a rules table built from the template's `{{#invoke:Check for deprecated parameters\|check\|...}}` block, and says which page to put it on. Lua patterns become `#` rows, and any that can't be converted are flagged. `--oldid` reads an older revision, from before the block was removed. |
@@ -298,37 +299,71 @@ Options that apply to every command go before the command name, for example
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--bot-user NAME` | `ParamBot` | Account name. Also sets the default rules, report and run pages under `User:NAME/`. |
-| `--rules-page TITLE` | `User:<bot-user>/Rules` | The page listing the rules pages. |
+| `--config FILE` | `parambot.toml` next to `user-config.py` | The [settings](#settings) file. |
+| `--bot-user NAME` | the account in `user-config.py`, else `ParamBot` | Account name. Also sets the default names of the bot's pages, under `User:NAME/`. |
+| `--rules-page TITLE` | `[pages] rules`, else `User:<bot-user>/Rules` | The page listing the rules pages. |
 | `--rules-file PATH` | | Read the rules from a local file instead, as if each file were an active rules page. A directory means every `.mediawiki` file in it. Can be repeated. |
-| `--lang`, `--family` | `en`, `wikipedia` | Wiki to work on. |
+| `--lang`, `--family` | `mylang` and `family` in `user-config.py`, else `en`, `wikipedia` | Wiki to work on. |
 | `-v` | | Verbose logging. |
 
 Options for `run`:
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--live` | off | Edit for real. |
-| `--trial` | off | Allow `--live` without the bot flag, for BRFA trial edits. |
-| `--report-only` | off | Save `User:ParamBot/Report` and never edit anything else, even with `--live`. Works out every fix like a dry run, and writes the edits it would make to a file. Needs no bot flag: the bot policy lets a bot edit its own userspace without approval. It needs a full run, so it can't be combined with `--page`, `--template`, `--any-namespace`, `--rules-file` or another `--report-page`, and it carries on past setup problems, to put them on the report. |
-| `--max-edits N` | none | Stop after this many edits, for example for a BRFA trial. |
-| `--max-hours H` | 20 | Stop starting new work after this many hours, so a daily run is done before the next starts. `0` means no limit. |
-| `--cooldown-days N` | 30 | Don't edit a page the bot edited this recently. `0` turns this off. |
+| `--dry-run` | | Read only, whatever `mode` says: write the report and the edits it would make to files. |
+| `--live` | | Edit for real. |
+| `--trial` | off | Allow a live run without the bot flag, for BRFA trial edits. |
+| `--report-only` | | Save the report page and never edit anything else, even with `--live`. Works out every fix like a dry run, and writes the edits it would make to a file. Needs no bot flag: the bot policy lets a bot edit its own userspace without approval, so the report page must be a subpage of `User:<bot-user>`. It needs a full run, so it can't be combined with `--page`, `--template`, `--any-namespace` or `--rules-file`, and it carries on past setup problems, to put them on the report. |
+| `--max-edits N` | `max_edits` | Stop after this many edits, for example for a BRFA trial. `0` means no limit. |
+| `--max-hours H` | `max_hours` | Stop starting new work after this many hours. `0` means no limit. |
+| `--cooldown-days N` | `cooldown_days` | Don't edit a page the bot edited this recently. `0` turns this off. |
 | `--template NAME` | all | Only use this template's rules. Can be repeated. |
 | `--page TITLE` | | Only check this page, skipping the categories. Can be repeated. |
 | `--any-namespace` | off | With `--page`, allow non-articles such as sandboxes. Dry runs only. |
-| `--report-page`, `--run-page` | `User:<bot-user>/Report`, `/Run` | Pages to use instead. |
-| `--out-dir DIR` | `out` | Where dry runs, and live runs that can't save the report, write their files. |
+| `--report-page`, `--run-page` | `[pages] report`, `[pages] run` | Pages to use instead. |
+| `--out-dir DIR` | `[output] dir` | Where dry runs, and live runs that can't save the report, write their files. |
 
-Dry runs don't need an account or a `user-config.py`. Set `PARAMBOT_CONTACT`
-to put a contact URL or email address in the User-Agent; the default is the
-bot's user page.
+Without `--dry-run`, `--report-only` or `--live`, a run does what `mode` in
+the settings says. Given more than one, the safest wins: `--dry-run`, then
+`--report-only`. Dry runs don't need an account or a `user-config.py`.
 
 `run` exits with 0 when the run finishes, and 1 when an error stopped it (the
 report is still written). It exits with 2 when it refused to start or was
 switched off: for example the Run page doesn't say `yes`, the rules page is
 missing, or the account is wrong. A run with no usable rules finishes
 normally, with the reasons on the report.
+
+## Settings
+
+Everything that can be changed without changing the code is in
+`parambot.toml`, next to Pywikibot's `user-config.py`: in `PYWIKIBOT_DIR`,
+or the directory the bot runs in. `--config FILE` names another file. Copy
+[`deploy/parambot.example.toml`](deploy/parambot.example.toml), which lists
+every setting with its default and what it does. Every setting is optional,
+and the options above override them for one run. A misspelt or unusable
+setting stops the bot before it does anything, saying what's wrong.
+
+The account, the wiki and its language aren't in it: they come from
+`user-config.py`, along with Pywikibot's own settings, such as
+`put_throttle` (seconds between edits).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `mode` | `"dry-run"` | What a plain `parambot run` does: `"dry-run"`, `"report-only"` or `"live"`. |
+| `[pages]` `rules`, `report`, `run`, `instructions`, `faq`, `header`, `link_rule` | `User:<bot>/Rules`, `/Report` and so on; `instructions` is the rules page's `/Instructions` | The bot's pages. The report page can't be one of the others. |
+| `[limits]` `cooldown_days` | `30` | Don't edit a page the bot edited this recently. `0` turns it off. |
+| `[limits]` `max_hours` | `20` | Stop starting new work after this many hours, so a daily run is done before the next starts. `0` means no limit. |
+| `[limits]` `max_edits` | `0` | Stop after this many edits. `0` means no limit. |
+| `[limits]` `large_run` | `500` | A run with more edits than this gets a note on the report. `0` means never. |
+| `[limits]` `failures_in_a_row` | `5` | Stop the run when this many pages in a row fail. |
+| `[limits]` `read_delay` | `1` | Seconds between API reads, at least. |
+| `[rules]` `protection` | `"templateeditor"` | The protection the rules page needs before a live run will start: `"autoconfirmed"`, `"extendedconfirmed"`, `"templateeditor"` or `"sysop"`, or anything stronger. |
+| `[output]` `dir` | `"out"` | Where dry runs, and runs that can't save the report, write their files. |
+| `[output]` `contact` | the bot's user page | A URL or email address for the User-Agent, so Wikimedia can reach the operators. |
+
+Some things stay in the code on purpose, because the bot's approval rests on
+them: it only edits articles, and the words that let the Run page switch it
+on (`yes`, `true`, `run`, `on`, and `report` for a report-only run).
 
 ## Deploying on Toolforge
 
@@ -347,7 +382,9 @@ Toolforge chooses the time of day.
    *High-volume (bot) access* and *Edit existing pages* grants.
 3. Copy [`deploy/user-config.example.py`](deploy/user-config.example.py) to
    `~/parambot/user-config.py`, and put the bot password in
-   `~/parambot/user-password.py`. Both files are git-ignored.
+   `~/parambot/user-password.py`. To change any [settings](#settings), copy
+   [`deploy/parambot.example.toml`](deploy/parambot.example.toml) to
+   `~/parambot/parambot.toml`. All three files are git-ignored.
 4. Set up the bot's pages. *Edit existing pages* doesn't let the bot create
    pages, so they all have to exist first:
    - `User:ParamBot`, using `{{bot|YourUsername}}`
@@ -385,7 +422,9 @@ Until the bot is approved, the job runs with `--report-only`, and
 `User:ParamBot/Run` says `report`: it updates the report every day and edits
 no articles. For a BRFA trial, run by hand first with
 `parambot run --live --trial --max-edits 50`. Once approved, change the job's
-`--report-only` to `--live`, and the Run page to `yes`.
+`--report-only` to `--live`, and the Run page to `yes`. (Or take
+`--report-only` out of the job and set `mode` in `parambot.toml` instead: the
+job then does what the settings say.)
 
 ## Project layout
 
@@ -397,7 +436,8 @@ the templates (`prepare`), then applies the active ones to each article
 | Path | Contents |
 |---|---|
 | `parambot/cli.py` | The command line: one function per command. |
-| `parambot/options.py` | The settings for a run. |
+| `parambot/options.py` | The settings for a run, with their defaults. |
+| `parambot/settings.py` | Reading the settings file, `parambot.toml`. |
 | `parambot/bot.py` | A run: pre-flight checks, finding pages in the categories, fixing them, the report. |
 | `parambot/botpages.py` | Checking the bot's own pages (user page, rules, Run and report pages). |
 | `parambot/rulespages.py` | Reading the list of rules pages, fetching each one's approved revision, and combining their rules. |
@@ -419,7 +459,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `docs/header.mediawiki` | The `User:ParamBot/Header` template: links across the top of the bot's pages and the report. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
-| `deploy/` | Toolforge job and Pywikibot config template. |
+| `deploy/` | Toolforge job, and templates for Pywikibot's `user-config.py` and the settings file. |
 | `tests/` | The test suite; `tests/fakes.py` is the fake wiki. |
 | `.github/workflows/tests.yml` | The checks GitHub runs on every push and pull request. |
 

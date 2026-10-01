@@ -26,10 +26,7 @@ log = logging.getLogger('parambot')
 SUMMARY_LIMIT = 500  # characters; MediaWiki cuts longer summaries
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
 REPORT_VALUES = {'report'}   # lets a report-only run go ahead, but nothing else
-# More edits than this in one run gets a note on the report, to be checked.
-LARGE_RUN = 500
 _clock = time.monotonic   # seconds; tests replace it
-MAX_FAILURES_IN_A_ROW = 5
 
 
 class StopRun(Exception):
@@ -96,6 +93,7 @@ class ParamBot:
             # Articles only, as the bot request asked; other pages are for previews.
             raise StopRun(msg.ANY_NAMESPACE_LIVE)
         if options.saves_report:
+            self._check_report_page()
             self._check_account()
             self._check_run_page()
         problems = self._check_pages()
@@ -140,8 +138,24 @@ class ParamBot:
             if used]
         if partial:
             raise StopRun(msg.report_only_partial(partial))
-        if options.report_page != options.own_report_page:
-            raise StopRun(msg.report_only_elsewhere(options.report_page, options.own_report_page))
+
+    def _check_report_page(self) -> None:
+        """Each run replaces the report page, so it mustn't be one of the
+        bot's other pages.  Reporting only, it must be in the bot's own
+        userspace, too: the only place it may edit without approval."""
+        options = self.options
+        report = normalize_title(options.report_page)
+        rules_pages = normalize_title(options.rules_page) + '/'
+        for title, what in options.other_pages().items():
+            if normalize_title(title) == report:
+                raise StopRun(msg.report_page_taken(options.report_page, what))
+        if report.startswith(rules_pages):
+            raise StopRun(msg.report_page_taken(options.report_page, 'a rules page'))
+        if options.report_only and not self._in_own_userspace(report):
+            raise StopRun(msg.report_only_elsewhere(options.report_page, options.user_page))
+
+    def _in_own_userspace(self, title: str) -> bool:
+        return normalize_title(title).startswith(normalize_title(self.options.user_page) + '/')
 
     def _check_account(self) -> None:
         user = self.wiki.login()
@@ -165,9 +179,13 @@ class ParamBot:
 
     def _check_may_save(self, title: str) -> None:
         """The last check before anything is saved.  Reporting only, nothing
-        but the bot's own report page, whatever else the run was told."""
-        if self.options.report_only and title != self.options.own_report_page:
-            raise RuntimeError(msg.report_only_refused_save(title, self.options.own_report_page))
+        but the report page in the bot's own userspace, whatever else the run
+        was told."""
+        options = self.options
+        if options.report_only and (
+                normalize_title(title) != normalize_title(options.report_page)
+                or not self._in_own_userspace(title)):
+            raise RuntimeError(msg.report_only_refused_save(title, options.report_page))
 
     def _check_pages(self) -> list[str]:
         """Problems with the bot's own pages; notes go straight on the report."""
@@ -248,7 +266,7 @@ class ParamBot:
         wrong."""
         failures = 0
         for page in pages:
-            if self.options.max_edits is not None and self.report.edits >= self.options.max_edits:
+            if self.options.max_edits and self.report.edits >= self.options.max_edits:
                 self.report.notes.append(msg.stopped_at_max_edits(self.options.max_edits))
                 break
             if self._out_of_time():
@@ -266,7 +284,7 @@ class ParamBot:
                 log.exception('Error while processing %s', page.title())
                 self._skip(page.title(), msg.skip_error(error))
                 failures += 1
-                if failures >= MAX_FAILURES_IN_A_ROW:
+                if failures >= self.options.failures_in_a_row:
                     raise RuntimeError(msg.too_many_failures(failures, error)) from error
             else:
                 failures = 0
@@ -296,7 +314,7 @@ class ParamBot:
             self.report.edits += 1
 
     def _out_of_time(self) -> bool:
-        """Whether the run has used up --max-hours."""
+        """Whether the run has used up its max_hours."""
         hours = self.options.max_hours
         if not hours:
             return False
@@ -380,8 +398,8 @@ class ParamBot:
         out_dir instead on dry runs, when local_only is set, or when saving
         fails.  The edits a run would have made go there too."""
         options = self.options
-        if self.report.edits > LARGE_RUN:
-            self.report.notes.append(msg.large_run(self.report.edits, LARGE_RUN,
+        if options.large_run and self.report.edits > options.large_run:
+            self.report.notes.append(msg.large_run(self.report.edits, options.large_run,
                                                    options.edits_articles))
         timestamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M')
         text = self.report.render(timestamp, options.live, options.report_only)

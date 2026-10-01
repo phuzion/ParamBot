@@ -1,0 +1,65 @@
+# ParamBot's settings. Copy this file to parambot.toml, next to user-config.py
+# (in PYWIKIBOT_DIR, or the directory the bot runs in), or name another file
+# with --config.
+#
+# Every setting is optional. Each one here is commented out and shows its
+# default: remove the # in front of a setting to change it. Command-line
+# options override these for one run.
+#
+# The account, the wiki and its language aren't set here: they come from
+# user-config.py, the file Pywikibot logs in with.
+
+# What a plain "parambot run" does:
+#   "dry-run"      read only: write the report, and the edits it would make,
+#                  to files in [output] dir
+#   "report-only"  save the report page and edit nothing else; needs no bot
+#                  flag, and the Run page may say "report"
+#   "live"         edit articles, then save the report page
+# --dry-run, --report-only and --live override it. Given more than one, the
+# safest wins.
+# mode = "dry-run"
+
+[pages]
+# The bot's pages. By default they're subpages of User:<bot>, the account
+# named in user-config.py. These defaults are for ParamBot.
+# rules = "User:ParamBot/Rules"
+# The report page must be a page of its own. A report-only run only saves it
+# if it's a subpage of User:<bot>.
+# report = "User:ParamBot/Report"
+# run = "User:ParamBot/Run"
+# The default is the rules page's /Instructions subpage.
+# instructions = "User:ParamBot/Rules/Instructions"
+# Every edit summary links to the FAQ.
+# faq = "User:ParamBot/FAQ"
+# The links across the top of the bot's pages, and of the report.
+# header = "User:ParamBot/Header"
+# The template the rules page lists each rules page with.
+# link_rule = "User:ParamBot/LinkRule"
+
+[limits]
+# Don't edit a page the bot edited this many days ago or less. 0 turns it off.
+# cooldown_days = 30
+# Stop starting new work after this many hours, so a daily run is done before
+# the next one starts. 0 means no limit.
+# max_hours = 20
+# Stop after this many edits, such as for a BRFA trial. 0 means no limit.
+# max_edits = 0
+# A run with more edits than this gets a note on the report. 0 means never.
+# large_run = 500
+# Stop the run when this many pages in a row fail.
+# failures_in_a_row = 5
+# Seconds between API reads, at least.
+# read_delay = 1
+
+[rules]
+# The rules page says which rules the bot uses, so a live run won't start
+# unless it's protected at least this much. From weakest to strongest:
+# "autoconfirmed" (semi), "extendedconfirmed", "templateeditor", "sysop" (full).
+# protection = "templateeditor"
+
+[output]
+# Where dry runs, and runs that can't save the report, write their files.
+# dir = "out"
+# Who to contact about the bot, in the User-Agent the bot sends with every
+# request: a URL or an email address. The default is the bot's user page.
+# contact = "https://en.wikipedia.org/wiki/User:ParamBot"

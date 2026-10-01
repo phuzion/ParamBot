@@ -61,7 +61,39 @@ EXPIRY = '2026-12-01T00:00:00Z'
 ])
 def test_protection_helpers(protection, weak, expiry):
     page = FakePage('User:ExampleBot/Rules/T', protection=protection)
-    assert (too_weak(page), protection_expiry(page)) == (weak, expiry)
+    assert (too_weak(page, 'templateeditor'), protection_expiry(page)) == (weak, expiry)
+
+
+@pytest.mark.parametrize('required, level, needed', [
+    ('autoconfirmed', None, 'semi-protected or higher'),
+    ('extendedconfirmed', 'autoconfirmed', 'extended-confirmed protected or higher'),
+    ('templateeditor', 'extendedconfirmed', 'template-editor protected or higher'),
+    ('sysop', 'templateeditor', 'fully protected.'),
+])
+def test_the_protection_the_rules_page_needs_is_a_setting(required, level, needed):
+    # The rules page is protected one level too weakly for the setting...
+    opts = options(rules_protection=required)
+    protection = {'edit': (level, 'infinity')} if level else {}
+    result, _ = check(opts, **{RULES: FakePage(RULES, protection=protection)})
+    [problem] = result.problems
+    assert f'must be {needed}' in problem
+    # ...and one level up is enough.
+    stronger = 'autoconfirmed' if level is None else {
+        'autoconfirmed': 'extendedconfirmed', 'extendedconfirmed': 'templateeditor',
+        'templateeditor': 'sysop'}[level]
+    result, _ = check(opts, **{RULES: FakePage(
+        RULES, protection={'edit': (stronger, 'infinity')})})
+    assert result.problems == []
+
+
+def test_an_unknown_protection_level_is_too_weak():
+    page = FakePage(RULES, protection={'edit': ('superprotect', 'infinity')})
+    assert too_weak(page, 'autoconfirmed') == 'superprotect protected'
+
+
+def test_the_protection_setting_must_be_a_level():
+    with pytest.raises(ValueError, match='rules_protection must be one of'):
+        options(rules_protection='template-editor')
 
 
 def test_local_rules_file_skips_the_rules_page(tmp_path):

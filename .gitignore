@@ -6,6 +6,7 @@ __pycache__/
 out/
 user-config.py
 user-password.py
+parambot.toml
 .claude/settings.local.json
 *.lwp
 apicache*/

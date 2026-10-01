@@ -375,9 +375,9 @@ def user_page_without_bot_template(title: str) -> str:
 PROTECTION_REQUESTS = 'Wikipedia:Requests for page protection'
 
 
-def rules_page_unprotected(title: str, current: str) -> str:
+def rules_page_unprotected(title: str, current: str, needed: str) -> str:
     return (f'{title} (the rules page) is {current}. It says which rules the bot uses, so it '
-            f'must be template-editor protected or higher. Ask at {PROTECTION_REQUESTS}.')
+            f'must be {needed}. Ask at {PROTECTION_REQUESTS}.')
 
 
 def rules_protection_expires(title: str, expiry: str) -> str:
@@ -492,12 +492,12 @@ def large_run(edits: int, limit: int, made: bool) -> str:
 
 def stopped_at_max_hours(hours: float) -> str:
     unit = 'hour' if hours == 1 else 'hours'
-    return (f"Stopped after {hours:g} {unit} (--max-hours), so that the next run doesn't start "
+    return (f"Stopped after {hours:g} {unit} (max_hours), so that the next run doesn't start "
             'while this one is still going. It will pick up the articles that are left.')
 
 
 def stopped_at_max_edits(max_edits: int) -> str:
-    return f'Stopped after {count(max_edits, "edit")} (--max-edits).'
+    return f'Stopped after {count(max_edits, "edit")} (max_edits).'
 
 
 def too_many_failures(failures: int, error: Exception) -> str:
@@ -537,12 +537,18 @@ def report_only_partial(settings: list[str]) -> str:
             'part of the rules, and replace the full report everyone reads.')
 
 
-def report_only_elsewhere(report_page: str, own: str) -> str:
-    return f'--report-only only ever edits {own}, so it will not save the report to {report_page}.'
+def report_only_elsewhere(report_page: str, user_page: str) -> str:
+    return (f"Reporting only, the bot only edits its own userspace, so it won't save the report "
+            f'to {report_page}. Make the report page a subpage of {user_page}.')
 
 
-def report_only_refused_save(title: str, own: str) -> str:
-    return f'Reporting only: refused to save {title}. The only page it may edit is {own}.'
+def report_only_refused_save(title: str, report_page: str) -> str:
+    return f'Reporting only: refused to save {title}. The only page it may edit is {report_page}.'
+
+
+def report_page_taken(title: str, what: str) -> str:
+    return (f'The report page is set to {title}, which is {what}. Every run replaces the '
+            "report page's text, so it needs a page of its own.")
 
 
 def rules_page_missing(title: str) -> str:

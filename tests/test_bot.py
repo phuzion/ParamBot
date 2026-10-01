@@ -21,9 +21,10 @@ from fakes import (
 )
 
 from parambot import messages as msg
-from parambot.bot import MAX_FAILURES_IN_A_ROW, SUMMARY_LIMIT, ParamBot, StopRun, edit_summary
+from parambot.bot import SUMMARY_LIMIT, ParamBot, StopRun, edit_summary
 from parambot.fixer import TemplateRules, fix_wikitext
 from parambot.messages import plain
+from parambot.options import Options
 from parambot.rules import parse_config
 
 FIXED_TEXT = '{{Infobox officeholder\n| term_start = 2020\n}}'
@@ -116,7 +117,7 @@ def test_max_edits(tmp_path):
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(4)))
     report = ParamBot(wiki, opts).run()
     assert report.edits == 2
-    assert report.notes[-1] == 'Stopped after 2 edits (--max-edits).'
+    assert report.notes[-1] == 'Stopped after 2 edits (max_edits).'
 
 
 def _clock_an_hour_a_read(monkeypatch):
@@ -131,7 +132,7 @@ def test_a_run_stops_starting_new_work_after_max_hours(tmp_path, monkeypatch):
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(5)))
     report = ParamBot(wiki, opts).run()
     assert report.edits == 2     # an hour in, then two: the third would be 3 hours in
-    assert any(plain(note).startswith('Stopped after 2.5 hours (--max-hours), so that the '
+    assert any(plain(note).startswith('Stopped after 2.5 hours (max_hours), so that the '
                                       "next run doesn't start") for note in report.notes)
 
 
@@ -142,24 +143,26 @@ def test_max_hours_0_means_no_time_limit(tmp_path, monkeypatch):
     assert ParamBot(wiki, opts).run().edits == 5
 
 
-def test_no_edit_limit_unless_one_is_given(tmp_path):
-    opts = options(out_dir=str(tmp_path))
-    assert opts.max_edits is None
+@pytest.mark.parametrize('max_edits', [None, 0])
+def test_no_edit_limit_unless_one_is_given(tmp_path, max_edits):
+    opts = options(out_dir=str(tmp_path), max_edits=max_edits)
+    assert Options().max_edits is None
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(4)))
     report = ParamBot(wiki, opts).run()
     assert report.edits == 4
-    assert not any('--max-edits' in note for note in report.notes)
+    assert not any('max_edits' in note for note in report.notes)
 
 
-@pytest.mark.parametrize('live, pages, noted', [
-    (False, 3, 'This run would have made 3 edits, more than 2.'),
-    (True, 3, 'This run made 3 edits, more than 2.'),
-    (True, 2, None),
+@pytest.mark.parametrize('live, pages, large_run, noted', [
+    (False, 3, 2, 'This run would have made 3 edits, more than 2.'),
+    (True, 3, 2, 'This run made 3 edits, more than 2.'),
+    (True, 2, 2, None),
+    (True, 3, 0, None),    # 0: never
 ])
-def test_a_large_run_gets_a_note(tmp_path, monkeypatch, live, pages, noted):
-    # 500 in a real run; 2 here, to keep the test quick.
-    monkeypatch.setattr('parambot.bot.LARGE_RUN', 2)
-    opts = options(live=live, out_dir=str(tmp_path))
+def test_a_large_run_gets_a_note(tmp_path, live, pages, large_run, noted):
+    # 500 by default; 2 here, to keep the test quick.
+    assert Options().large_run == 500
+    opts = options(live=live, out_dir=str(tmp_path), large_run=large_run)
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY,
                                    *(article(f'P{i}') for i in range(pages)))
     report = ParamBot(wiki, opts).run()
@@ -278,18 +281,19 @@ def test_error_on_one_page_is_reported_and_the_run_continues(tmp_path):
         ('B', 'error: ConnectionError: API timed out')]
 
 
-def test_repeated_errors_stop_the_run(tmp_path):
-    opts = options(out_dir=str(tmp_path))
-    broken = [article(f'P{i}', broken=True) for i in range(MAX_FAILURES_IN_A_ROW + 3)]
+@pytest.mark.parametrize('failures', [5, 2])
+def test_repeated_errors_stop_the_run(tmp_path, failures):
+    opts = options(out_dir=str(tmp_path), failures_in_a_row=failures)
+    broken = [article(f'P{i}', broken=True) for i in range(failures + 3)]
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *broken)
-    with pytest.raises(RuntimeError, match=f'{MAX_FAILURES_IN_A_ROW} pages in a row failed'):
+    with pytest.raises(RuntimeError, match=f'{failures} pages in a row failed'):
         ParamBot(wiki, opts).run()
-    assert f'{MAX_FAILURES_IN_A_ROW} pages in a row failed' in only_report(tmp_path)
+    assert f'{failures} pages in a row failed' in only_report(tmp_path)
 
 
 def test_a_success_resets_the_error_count(tmp_path):
     opts = options(out_dir=str(tmp_path))
-    bad = MAX_FAILURES_IN_A_ROW - 1
+    bad = opts.failures_in_a_row - 1
     pages = ([article(f'X{i}', broken=True) for i in range(bad)] + [article('Good')]
              + [article(f'Y{i}', broken=True) for i in range(bad)])
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *pages)
@@ -418,12 +422,60 @@ def test_reporting_only_needs_a_full_run(tmp_path, changes, refused):
     assert not wiki.logged_in
 
 
-def test_reporting_only_saves_nowhere_but_the_bots_own_report_page(tmp_path):
-    opts = options(report_only=True, report_page='Wikipedia:Sandbox', out_dir=str(tmp_path))
+@pytest.mark.parametrize('report_page', ['Wikipedia:Sandbox', f'User talk:{BOT}/Report',
+                                         f'User:{BOT}Two/Report'])
+def test_reporting_only_saves_nowhere_outside_the_bots_userspace(tmp_path, report_page):
+    opts = options(report_only=True, report_page=report_page, out_dir=str(tmp_path))
     wiki = wiki_for(opts)
-    with pytest.raises(StopRun, match=f'only ever edits User:{BOT}/Report'):
+    with pytest.raises(StopRun, match=f'only edits its own userspace.*subpage of User:{BOT}'):
         ParamBot(wiki, opts).run()
     assert not wiki.logged_in
+
+
+def test_reporting_only_can_report_elsewhere_in_the_bots_userspace(tmp_path):
+    opts = options(report_only=True, report_page=f'User:{BOT}/Daily report',
+                   out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    ParamBot(wiki, opts).run()
+    assert wiki.page(f'User:{BOT}/Daily report').saved
+    assert wiki.page(f'User:{BOT}/Report').saved == []
+
+
+@pytest.mark.parametrize('report_only', [True, False])
+@pytest.mark.parametrize('page, what', [
+    ('run_page', 'the Run page'), ('rules_page', 'the rules page'), ('faq_page', 'the FAQ'),
+    ('user_page', "the bot's user page"),
+])
+def test_the_report_never_replaces_another_of_the_bots_pages(tmp_path, report_only, page,
+                                                             what):
+    taken = getattr(options(), page)
+    opts = options(live=True, report_only=report_only, report_page=taken,
+                   out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    with pytest.raises(StopRun, match=f'set to {taken}, which is {what}'):
+        ParamBot(wiki, opts).run()
+    assert not wiki.logged_in
+    assert wiki.page(taken).saved == []
+
+
+def test_the_report_never_replaces_a_rules_page(tmp_path):
+    opts = options(live=True, report_page=f'User:{BOT}/Rules/Infobox officeholder',
+                   out_dir=str(tmp_path))
+    with pytest.raises(StopRun, match='which is a rules page'):
+        ParamBot(wiki_for(opts), opts).run()
+
+
+def test_reporting_only_refuses_to_save_any_other_page(tmp_path):
+    # The last check, even if the report page changed after the first.
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    bot = ParamBot(wiki_for(opts), opts)
+    bot._check_may_save(f'User:{BOT}/Report')
+    for title in (f'User:{BOT}/Run', 'Wikipedia:Sandbox'):
+        with pytest.raises(RuntimeError, match=f'refused to save {title}'):
+            bot._check_may_save(title)
+    opts.report_page = 'Wikipedia:Sandbox'
+    with pytest.raises(RuntimeError, match='refused to save Wikipedia:Sandbox'):
+        bot._check_may_save('Wikipedia:Sandbox')
 
 
 def test_reporting_only_can_never_save_an_article(tmp_path):
