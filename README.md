@@ -374,7 +374,9 @@ on (`yes`, `true`, `run`, `on`, and `report` for a report-only run).
 [`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot once a day with the
 [Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Running_jobs).
 It uses the `@daily` schedule, as the Toolforge documentation asks, so
-Toolforge chooses the time of day.
+Toolforge chooses the time of day. Once it's set up,
+[`docs/operators.md`](docs/operators.md) covers looking after it: logs,
+updates, stopping it, trials and common problems.
 
 1. Check the repository out at `~/parambot`, and create a virtual environment
    at `~/parambot/venv` with the package installed. Build it with the same
@@ -460,6 +462,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `docs/documentation.mediawiki` | Full documentation of the bot, for `User:ParamBot/Documentation`. |
 | `docs/faq.mediawiki` | A short FAQ, for `User:ParamBot/FAQ`, which every edit summary links to. |
 | `docs/talk-page.mediawiki` | The header of `User talk:ParamBot`, with archiving. |
+| `docs/operators.md` | For the operators: how the bot runs on Toolforge, and commands for looking after it. |
 | `docs/header.mediawiki` | The `User:ParamBot/Header` template: links across the top of the bot's pages and the report. |
 | `examples/rules.mediawiki` | An example of the list of rules pages. |
 | `examples/rules/` | Example rules pages, one per template. |
