@@ -55,6 +55,10 @@ def test_run_options_are_built_in_one_go():
     assert opts.report_page == 'User:ExampleBot/Report'   # the default
 
 
+def test_no_edit_limit_by_default():
+    assert _options(_build_parser().parse_args(['run'])).max_edits is None
+
+
 def test_report_only_option():
     opts = _options(_build_parser().parse_args(['run', '--report-only']))
     assert opts.report_only and opts.saves_report and not opts.edits_articles

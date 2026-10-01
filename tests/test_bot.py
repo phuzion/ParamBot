@@ -119,6 +119,35 @@ def test_max_edits(tmp_path):
     assert report.notes[-1] == 'Stopped after 2 edits (--max-edits).'
 
 
+def test_no_edit_limit_unless_one_is_given(tmp_path):
+    opts = options(out_dir=str(tmp_path))
+    assert opts.max_edits is None
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(4)))
+    report = ParamBot(wiki, opts).run()
+    assert report.edits == 4
+    assert not any('--max-edits' in note for note in report.notes)
+
+
+@pytest.mark.parametrize('live, pages, noted', [
+    (False, 3, 'This run would have made 3 edits, more than 2.'),
+    (True, 3, 'This run made 3 edits, more than 2.'),
+    (True, 2, None),
+])
+def test_a_large_run_gets_a_note(tmp_path, monkeypatch, live, pages, noted):
+    # 500 in a real run; 2 here, to keep the test quick.
+    monkeypatch.setattr('parambot.bot.LARGE_RUN', 2)
+    opts = options(live=live, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY,
+                                   *(article(f'P{i}') for i in range(pages)))
+    report = ParamBot(wiki, opts).run()
+    large = [plain(note) for note in report.notes if 'more than' in note]
+    if noted:
+        [note] = large
+        assert note.startswith(noted)
+    else:
+        assert large == []
+
+
 # -- the rules pages -------------------------------------------------------
 
 def test_inactive_rules_are_checked_but_not_used(tmp_path):

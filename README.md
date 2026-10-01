@@ -127,7 +127,10 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   would edit articles. After that
   it makes no more wiki edits, not even the report, which is written to a
   local file instead.
-- **Edit cap.** At most 100 edits per run (`--max-edits`).
+- **Large runs are flagged.** There's no limit on edits per run, but a run of
+  more than 500 edits gets a note on the report, so a rule that catches more
+  than it should is noticed. `--max-edits N` sets a limit, for example for a
+  BRFA trial.
 - **Gentle on the API.** Every read waits at least a second after the last
   one (`READ_DELAY` in `cli.py`), so the bot can't make more than 3,600 an
   hour, and edits are at least 10 seconds apart. Nothing is asked once per
@@ -305,7 +308,7 @@ Options for `run`:
 | `--live` | off | Edit for real. |
 | `--trial` | off | Allow `--live` without the bot flag, for BRFA trial edits. |
 | `--report-only` | off | Save `User:ParamBot/Report` and never edit anything else, even with `--live`. Works out every fix like a dry run, and writes the edits it would make to a file. Needs no bot flag: the bot policy lets a bot edit its own userspace without approval. It needs a full run, so it can't be combined with `--page`, `--template`, `--any-namespace`, `--rules-file` or another `--report-page`, and it carries on past setup problems, to put them on the report. |
-| `--max-edits N` | 100 | Stop after this many edits. |
+| `--max-edits N` | none | Stop after this many edits, for example for a BRFA trial. |
 | `--cooldown-days N` | 30 | Don't edit a page the bot edited this recently. `0` turns this off. |
 | `--template NAME` | all | Only use this template's rules. Can be repeated. |
 | `--page TITLE` | | Only check this page, skipping the categories. Can be repeated. |

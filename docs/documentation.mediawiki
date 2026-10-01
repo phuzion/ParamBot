@@ -27,7 +27,7 @@
 | Once a day
 |-
 ! How much
-| At most 100 edits a run, at least 10 seconds apart
+| At least 10 seconds apart. A run with more than 500 edits is noted on the report
 |-
 ! Rules
 | [[User:ParamBot/Rules]]
@@ -133,7 +133,7 @@ Once a day, ParamBot:
 # '''Fixes each article''' in the categories that have pages. Before each edit, it checks [[User:ParamBot/Run]] again.
 # '''Writes the report''' to [[User:ParamBot/Report]].
 
-It stops early after 100 edits, if [[User:ParamBot/Run]] stops saying <code>yes</code>, or if five articles in a row fail with errors.
+It stops early if [[User:ParamBot/Run]] stops saying <code>yes</code>, or if five articles in a row fail with errors. There's no limit on how many edits a run makes, but a run with more than 500 gets a note on the report, so that a rule catching more than it should is noticed.
 
 == The rules ==
 The bot only knows what the rules tell it. [[User:ParamBot/Rules/Instructions]] explains, step by step, how to write them; this is an overview.

@@ -484,6 +484,12 @@ def report_summary(edits: int, needing_review: int, report_only: bool = False) -
 
 # -- stopping --------------------------------------------------------------
 
+def large_run(edits: int, limit: int, made: bool) -> str:
+    did = 'made' if made else 'would have made'
+    return (f'This run {did} {count(edits, "edit")}, more than {limit}. A backlog can do that, '
+            'but check the newest rules in case one is catching more than it should.')
+
+
 def stopped_at_max_edits(max_edits: int) -> str:
     return f'Stopped after {count(max_edits, "edit")} (--max-edits).'
 

@@ -77,7 +77,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument('--report-only', action='store_true',
                      help='save the report page and never edit anything else, even with '
                           "--live; needs no bot flag, since it only edits the bot's own page")
-    run.add_argument('--max-edits', type=int, default=100)
+    run.add_argument('--max-edits', type=int, default=None,
+                     help='stop after this many edits, such as for a BRFA trial '
+                          '(default: no limit)')
     run.add_argument('--cooldown-days', type=int, default=30,
                      help="don't repeat a fix on a page the bot edited this recently (0 = off)")
     run.add_argument('--template', action='append', default=[],

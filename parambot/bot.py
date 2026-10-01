@@ -25,6 +25,8 @@ log = logging.getLogger('parambot')
 SUMMARY_LIMIT = 500  # characters; MediaWiki cuts longer summaries
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
 REPORT_VALUES = {'report'}   # lets a report-only run go ahead, but nothing else
+# More edits than this in one run gets a note on the report, to be checked.
+LARGE_RUN = 500
 MAX_FAILURES_IN_A_ROW = 5
 
 
@@ -243,7 +245,7 @@ class ParamBot:
         wrong."""
         failures = 0
         for page in pages:
-            if self.report.edits >= self.options.max_edits:
+            if self.options.max_edits is not None and self.report.edits >= self.options.max_edits:
                 self.report.notes.append(msg.stopped_at_max_edits(self.options.max_edits))
                 break
             candidate = candidates.get(page.title())
@@ -365,6 +367,9 @@ class ParamBot:
         out_dir instead on dry runs, when local_only is set, or when saving
         fails.  The edits a run would have made go there too."""
         options = self.options
+        if self.report.edits > LARGE_RUN:
+            self.report.notes.append(msg.large_run(self.report.edits, LARGE_RUN,
+                                                   options.edits_articles))
         timestamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M')
         text = self.report.render(timestamp, options.live, options.report_only)
         saved = False

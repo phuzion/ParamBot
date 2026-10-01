@@ -16,7 +16,7 @@ class Options:
     # set: no bot flag or --trial needed, as the bot policy allows edits to
     # a bot's own userspace without approval.
     report_only: bool = False
-    max_edits: int = 100
+    max_edits: int | None = None    # stop after this many edits; None: no limit
     cooldown_days: int = 30         # don't edit a page the bot edited this recently
     namespaces: tuple[int, ...] = (0,)
     templates: tuple[str, ...] = ()  # only these templates' rules
