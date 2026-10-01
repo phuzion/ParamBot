@@ -11,4 +11,5 @@ usernames['wikipedia']['en'] = 'ParamBot'
 password_file = 'user-password.py'
 
 put_throttle = 10   # seconds between edits
-maxlag = 5
+# Edits use Pywikibot's default maxlag of 5. Don't set it here: Pywikibot 11.8
+# renamed maxlag to write_maxlag, and each version warns about the other name.
