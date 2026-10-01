@@ -5,6 +5,7 @@
   }} – [[User:ParamBot/Rules/{{{1}}}|current page]]{{#if:{{{2|}}}|&#32;· [[Special:Diff/{{{2}}}/cur|changes since approval]]}} · [[Template:{{{1}}}|template]]
 |<span class="error">A <code><nowiki>{{User:ParamBot/LinkRule}}</nowiki></code> is missing the template's name.</span>
 }}</includeonly><noinclude>
+{{protected page|small=yes}}
 Lists one template's rules page on [[User:ParamBot/Rules]], with the revision of it that a template editor has approved. [[User:ParamBot|ParamBot]] reads the wikitext of [[User:ParamBot/Rules]] and uses exactly that revision of the rules page, never a newer one. This template only changes how the list looks, so editing it can't change what the bot does.
 
 == Usage ==
