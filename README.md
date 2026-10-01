@@ -12,8 +12,10 @@ information, and the article lands in the template's *Pages using
 categories daily and renames the old parameters to the new ones. It never
 reverts anyone's edit and changes nothing else.
 
-**Status:** not deployed. The `ParamBot` account exists, but there is no bot
-approval request (BRFA) yet. See [Status](#status).
+**Status:** waiting for approval at
+[Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot).
+Until then it runs daily in report-only mode and edits no articles. See
+[Status](#status).
 
 ## What it does to a page
 
@@ -467,9 +469,17 @@ the templates (`prepare`), then applies the active ones to each article
 
 ## Status
 
-The code is complete and tested against the live wiki in dry runs, but the bot
-hasn't edited Wikipedia. The `ParamBot` account and its pages exist as
-placeholders; `parambot check-rules` lists what they still need.
+- **Approval.** The bot approval request,
+  [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot),
+  was filed on 1 October 2026 and is open. The bot has no bot flag yet, and
+  its user page says `status=unapproved`.
+- **Running.** The bot runs once a day on Toolforge in report-only mode:
+  `User:ParamBot/Run` says `report`, and the job runs with `--report-only`.
+  It updates `User:ParamBot/Report` with the edits it would make, and edits
+  nothing else.
+- **On the wiki.** The bot's pages are set up: `User:ParamBot/Rules` is
+  template-editor protected and lists the approved rules pages, and the
+  documentation, FAQ, instructions and talk page are in place.
 
 Decided:
 
@@ -478,12 +488,15 @@ Decided:
 - **Timing.** The bot runs once a day, or more often if editors ask for it.
 - **Scope.** Renames and `remove` rules are in.
 
-Still to decide before filing a BRFA:
+Still open:
 
+- **Cooldown.** How long the bot waits before editing an article again: 30
+  days now. At the BRFA, 15 days and 7 days (with weekly runs) have been
+  suggested, as has a shorter wait when a revert undid the bot's edit along
+  with the edit before it. It's `cooldown_days` in the
+  [settings](#settings).
 - **Merging.** Whether `merge` rules are wanted. This will be discussed on
   the wiki.
-- **Cooldown.** How long the bot waits before editing an article again
-  (30 days now).
 
 ## License
 
