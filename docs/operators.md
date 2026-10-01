@@ -5,8 +5,8 @@ commands for looking after it. For what the bot does and how its rules work,
 see the [README](../README.md) and
 [User:ParamBot/Documentation](https://en.wikipedia.org/wiki/User:ParamBot/Documentation).
 
-In the commands below, `<tool>` is the Toolforge tool ParamBot runs as, and
-`<you>` is your Toolforge shell name.
+ParamBot runs as the Toolforge tool `parambot`. In the commands below, `<you>`
+is your Toolforge shell name.
 
 ## The bot's pages
 
@@ -78,7 +78,7 @@ an email every day.
 
 ```bash
 ssh <you>@login.toolforge.org
-become <tool>
+become parambot
 cd ~/parambot
 ```
 

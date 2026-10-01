@@ -9,7 +9,9 @@ description = "Wikipedia bot that fixes deprecated template parameters restored 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pywikibot>=9.0",
+    # From 11.0, every request waits out a Retry-After from Wikimedia, not
+    # only those made when the servers are lagged.
+    "pywikibot>=11.0",
     "mwparserfromhell>=0.6.6",
 ]
 
