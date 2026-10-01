@@ -142,8 +142,11 @@ class Report:
     def skip(self, title: str, reason: str) -> None:
         self.skipped.append((title, reason))
 
-    def stats_line(self, timestamp: str, live: bool) -> str:
-        verb = 'made' if live else 'would have made (dry run)'
+    def stats_line(self, timestamp: str, live: bool, report_only: bool = False) -> str:
+        if report_only:
+            verb = 'would have made (reporting only)'
+        else:
+            verb = 'made' if live else 'would have made (dry run)'
         return (f'Last run: {timestamp} (UTC). Polled '
                 f'{count(self.categories_polled, "category", "categories")}, '
                 f'{self.categories_populated} populated; checked '
@@ -185,9 +188,10 @@ class Report:
                             f'|| {self.links.wikitext(issue.reason)}']
         return [*lines, '|}']
 
-    def render(self, timestamp: str, live: bool) -> str:
+    def render(self, timestamp: str, live: bool, report_only: bool = False) -> str:
         top = [f'{{{{{self.header}}}}}'] if self.header else []
-        return '\n'.join([*top, HEADER, self.stats_line(timestamp, live), '', self.body()])
+        return '\n'.join([*top, HEADER, self.stats_line(timestamp, live, report_only), '',
+                          self.body()])
 
     @staticmethod
     def body_of(text: str) -> str:

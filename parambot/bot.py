@@ -24,6 +24,7 @@ log = logging.getLogger('parambot')
 
 SUMMARY_LIMIT = 500  # characters; MediaWiki cuts longer summaries
 RUN_VALUES = {'yes', 'true', 'run', 'on'}
+REPORT_VALUES = {'report'}   # lets a report-only run go ahead, but nothing else
 MAX_FAILURES_IN_A_ROW = 5
 
 
@@ -84,14 +85,17 @@ class ParamBot:
 
     def _preflight(self) -> None:
         options = self.options
-        if options.live and options.any_namespace:
+        if options.report_only:
+            self._check_report_only()
+        elif options.live and options.any_namespace:
             # Articles only, as the bot request asked; other pages are for previews.
             raise StopRun(msg.ANY_NAMESPACE_LIVE)
-        if options.live:
+        if options.saves_report:
             self._check_account()
             self._check_run_page()
         problems = self._check_pages()
-        if problems and options.live:
+        # A report-only run carries on, to put the problems on the report.
+        if problems and options.edits_articles:
             raise StopRun(msg.pages_not_ready(problems))
         for problem in problems:
             log.warning('A live run would refuse to start: %s', msg.plain(problem))
@@ -121,20 +125,44 @@ class ParamBot:
 
     # -- setup -------------------------------------------------------------
 
+    def _check_report_only(self) -> None:
+        """A report-only run saves the report everyone reads, so it has to
+        be a full run, and put the report where it belongs."""
+        options = self.options
+        partial = [setting for setting, used in (
+            ('--page', options.pages), ('--template', options.templates),
+            ('--any-namespace', options.any_namespace), ('--rules-file', options.rules_files))
+            if used]
+        if partial:
+            raise StopRun(msg.report_only_partial(partial))
+        if options.report_page != options.own_report_page:
+            raise StopRun(msg.report_only_elsewhere(options.report_page, options.own_report_page))
+
     def _check_account(self) -> None:
         user = self.wiki.login()
         if normalize_title(user) != normalize_title(self.options.bot_user):
             raise StopRun(msg.wrong_account(user, self.options.bot_user))
-        if not self.options.trial and not self.wiki.has_right('bot'):
+        # Reporting only needs no bot flag: it edits only the bot's own page.
+        if self.options.edits_articles and not self.options.trial \
+                and not self.wiki.has_right('bot'):
             raise StopRun(msg.no_bot_right(user))
 
     def _check_run_page(self, before: str | None = None) -> None:
-        """Stop unless the Run page says yes.  Called at the start of a live
-        run and again before every edit, with the page about to be edited."""
+        """Stop unless the Run page says yes, or, reporting only, "report".
+        Called at the start of a run that saves anything, and again before
+        every edit, with the page about to be edited."""
         page = self.wiki.page(self.options.run_page)  # a new object, so fetched fresh
-        text = page.text if page.exists() else ''
-        if strip_comments(text).strip().lower() not in RUN_VALUES:
-            raise StopRun(msg.run_page_off(self.options.run_page, before))
+        text = strip_comments(page.text if page.exists() else '').strip().lower()
+        allowed = RUN_VALUES | REPORT_VALUES if self.options.report_only else RUN_VALUES
+        if text not in allowed:
+            raise StopRun(msg.run_page_off(self.options.run_page, before,
+                                           self.options.report_only))
+
+    def _check_may_save(self, title: str) -> None:
+        """The last check before anything is saved.  Reporting only, nothing
+        but the bot's own report page, whatever else the run was told."""
+        if self.options.report_only and title != self.options.own_report_page:
+            raise RuntimeError(msg.report_only_refused_save(title, self.options.own_report_page))
 
     def _check_pages(self) -> list[str]:
         """Problems with the bot's own pages; notes go straight on the report."""
@@ -253,7 +281,7 @@ class ParamBot:
         summary = edit_summary(result, self._rules_link(result, targets), self.options.faq_page)
         if reason:
             self._skip(title, reason)
-        elif self.options.live:
+        elif self.options.edits_articles:
             self._save(page, result, summary)
         else:
             self._record_diff(title, page.text, result.text, summary)
@@ -289,6 +317,7 @@ class ParamBot:
 
     def _save(self, page: WikiPage, result: FixResult, summary: str) -> None:
         title = page.title()
+        self._check_may_save(title)
         self._check_run_page(before=title)
         page.text = result.text
         try:
@@ -332,34 +361,48 @@ class ParamBot:
     # -- the report --------------------------------------------------------
 
     def _write_report(self, local_only: bool = False) -> None:
-        """Save the report page on live runs.  Write it to out_dir instead on
-        dry runs, when local_only is set, or when saving fails."""
+        """Save the report page on live and report-only runs.  Write it to
+        out_dir instead on dry runs, when local_only is set, or when saving
+        fails.  The edits a run would have made go there too."""
+        options = self.options
         timestamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M')
-        text = self.report.render(timestamp, self.options.live)
-        if self.options.live and not local_only:
+        text = self.report.render(timestamp, options.live, options.report_only)
+        saved = False
+        if options.saves_report and not local_only:
             try:
                 self._save_report_page(text)
-                return
+                saved = True
+            except StopRun as stop:
+                log.warning('Not saving %s: %s', options.report_page, msg.plain(str(stop)))
             except Exception:
                 log.exception('Could not save %s; writing the report locally instead',
-                              self.options.report_page)
-        os.makedirs(self.options.out_dir, exist_ok=True)
+                              options.report_page)
+        if saved and options.edits_articles:
+            return
+        os.makedirs(options.out_dir, exist_ok=True)
         stamp = datetime.now(UTC).strftime('%Y%m%d-%H%M%S')
-        report_path = os.path.join(self.options.out_dir, f'report-{stamp}.mediawiki')
-        diff_path = os.path.join(self.options.out_dir, f'edits-{stamp}.diff')
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(text)
-        with open(diff_path, 'w', encoding='utf-8') as f:
+        paths = []
+        if not saved:
+            paths.append(os.path.join(options.out_dir, f'report-{stamp}.mediawiki'))
+            with open(paths[-1], 'w', encoding='utf-8') as f:
+                f.write(text)
+        paths.append(os.path.join(options.out_dir, f'edits-{stamp}.diff'))
+        with open(paths[-1], 'w', encoding='utf-8') as f:
             f.write(''.join(self.diffs))
-        log.info('Wrote %s and %s', report_path, diff_path)
+        log.info('Wrote %s', ' and '.join(paths))
 
     def _save_report_page(self, text: str) -> None:
         page = self.wiki.page(self.options.report_page)
         if page.exists() and Report.body_of(page.text) == self.report.body():
             return
+        self._check_may_save(page.title())
+        if self.options.report_only:
+            # Still switched on?  A live run checks before every edit instead.
+            self._check_run_page(before=page.title())
         page.text = text
-        page.save(summary=msg.report_summary(self.report.edits, len(self.report.issues)),
-                  minor=True, bot=True, quiet=True, nocreate=True)
+        page.save(summary=msg.report_summary(self.report.edits, len(self.report.issues),
+                                             self.options.report_only),
+                  minor=True, bot=self.wiki.has_right('bot'), quiet=True, nocreate=True)
 
 
 def edit_summary(result: FixResult, rules_page: str, faq_page: str) -> str:

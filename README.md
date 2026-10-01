@@ -32,10 +32,11 @@ replacement.
 
 ## How a run works
 
-1. **Pre-flight checks** (live runs only). It logs in as the bot account,
-   checks the account has the `bot` right (unless `--trial` is given), checks
-   that `User:ParamBot/Run` says `yes`, and checks that all of its pages are
-   set up properly (see [Safeguards](#safeguards)).
+1. **Pre-flight checks** (live and report-only runs). It logs in as the bot
+   account, checks the account has the `bot` right (unless `--trial` or
+   `--report-only` is given), checks that `User:ParamBot/Run` says `yes` (or
+   `report`, for a report-only run), and checks that all of its pages are set
+   up properly (see [Safeguards](#safeguards)).
 2. **Reads the rules.** `User:ParamBot/Rules` lists one rules page per
    template, such as `User:ParamBot/Rules/Infobox settlement`, under an
    *Active* or an *Inactive* heading, with the revision of it that has been
@@ -101,7 +102,7 @@ stopping.
 |---|---|
 | `User:ParamBot` | an existing wikitext page that uses `{{bot}}` to name the operator, as bot policy requires |
 | `User:ParamBot/Rules` | an existing wikitext page, not a redirect, **template-editor protected or higher**, listing the rules pages and their approved revisions |
-| `User:ParamBot/Run` | an existing wikitext page, not a redirect, saying `yes` |
+| `User:ParamBot/Run` | an existing wikitext page, not a redirect, saying `yes` (or `report`, for a report-only run) |
 | `User:ParamBot/Report` | an existing wikitext page, not a redirect, that the bot account can edit |
 
 The rules decide what the bot edits, so anyone able to change them could
@@ -121,7 +122,9 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
 **Stopping and failures**
 
 - **Emergency stop.** The bot checks `User:ParamBot/Run` before every edit.
-  Changing it to anything but `yes` stops the bot straight away. After that
+  Changing it to anything but `yes` stops the bot straight away. `report`
+  lets a report-only run update the report, but still stops any run that
+  would edit articles. After that
   it makes no more wiki edits, not even the report, which is written to a
   local file instead.
 - **Edit cap.** At most 100 edits per run (`--max-edits`).
@@ -301,6 +304,7 @@ Options for `run`:
 |---|---|---|
 | `--live` | off | Edit for real. |
 | `--trial` | off | Allow `--live` without the bot flag, for BRFA trial edits. |
+| `--report-only` | off | Save `User:ParamBot/Report` and never edit anything else, even with `--live`. Works out every fix like a dry run, and writes the edits it would make to a file. Needs no bot flag: the bot policy lets a bot edit its own userspace without approval. It needs a full run, so it can't be combined with `--page`, `--template`, `--any-namespace`, `--rules-file` or another `--report-page`, and it carries on past setup problems, to put them on the report. |
 | `--max-edits N` | 100 | Stop after this many edits. |
 | `--cooldown-days N` | 30 | Don't edit a page the bot edited this recently. `0` turns this off. |
 | `--template NAME` | all | Only use this template's rules. Can be repeated. |
@@ -370,8 +374,11 @@ Toolforge chooses the time of day.
    `PROBLEM`.
 6. Run `toolforge jobs load deploy/jobs.yaml`.
 
-For a BRFA trial, run by hand first with
-`parambot run --live --trial --max-edits 50`.
+Until the bot is approved, the job runs with `--report-only`, and
+`User:ParamBot/Run` says `report`: it updates the report every day and edits
+no articles. For a BRFA trial, run by hand first with
+`parambot run --live --trial --max-edits 50`. Once approved, change the job's
+`--report-only` to `--live`, and the Run page to `yes`.
 
 ## Project layout
 

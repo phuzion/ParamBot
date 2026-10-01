@@ -474,8 +474,11 @@ def edit_summary(parts: list[str], rules_page: str, faq_page: str, limit: int) -
     return text + links
 
 
-def report_summary(edits: int, needing_review: int) -> str:
+def report_summary(edits: int, needing_review: int, report_only: bool = False) -> str:
     need = 'needs' if needing_review == 1 else 'need'
+    if report_only:
+        return (f'Updating report (reporting only): {count(edits, "edit")} it would make, '
+                f'{count(needing_review, "page")} {need} review')
     return f'Updating report: {count(edits, "edit")}, {count(needing_review, "page")} {need} review'
 
 
@@ -509,10 +512,25 @@ def no_bot_right(user: str) -> str:
     return f'{user} does not have the bot right; use --trial for BRFA trial edits'
 
 
-def run_page_off(title: str, before: str | None = None) -> str:
+def run_page_off(title: str, before: str | None = None, report_only: bool = False) -> str:
+    """report_only: a report-only run, which "report" lets run too."""
+    wanted = '"yes" or "report"' if report_only else '"yes"'
     if before:
-        return f'{title} no longer says "yes"; stopped before editing {before}'
-    return f'{title} does not say "yes"; not running'
+        return f'{title} no longer says {wanted}; stopped before editing {before}'
+    return f'{title} does not say {wanted}; not running'
+
+
+def report_only_partial(settings: list[str]) -> str:
+    return (f"--report-only doesn't work with {_and(settings)}: the report would cover only "
+            'part of the rules, and replace the full report everyone reads.')
+
+
+def report_only_elsewhere(report_page: str, own: str) -> str:
+    return f'--report-only only ever edits {own}, so it will not save the report to {report_page}.'
+
+
+def report_only_refused_save(title: str, own: str) -> str:
+    return f'Reporting only: refused to save {title}. The only page it may edit is {own}.'
 
 
 def rules_page_missing(title: str) -> str:

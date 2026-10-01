@@ -55,6 +55,14 @@ def test_run_options_are_built_in_one_go():
     assert opts.report_page == 'User:ExampleBot/Report'   # the default
 
 
+def test_report_only_option():
+    opts = _options(_build_parser().parse_args(['run', '--report-only']))
+    assert opts.report_only and opts.saves_report and not opts.edits_articles
+    # --live doesn't change that.
+    opts = _options(_build_parser().parse_args(['run', '--report-only', '--live']))
+    assert opts.report_only and not opts.edits_articles
+
+
 def test_check_rules_options():
     args = _build_parser().parse_args(
         ['--rules-file', 'r.mediawiki', '--rules-file', 'rules/', 'check-rules'])

@@ -4,6 +4,8 @@
     parambot run --page "User:X/sandbox" --any-namespace
                                   preview what the bot would do to a sandbox
     parambot run --live           real run (needs user-config.py and a bot account)
+    parambot run --report-only    save the report page and edit nothing else
+                                  (needs user-config.py, but no bot flag)
     parambot check-rules          check the bot's pages and the rules against the templates
     parambot scaffold TEMPLATE    print a rules table built from TEMPLATE's
                                   deprecated-parameter check, ready to paste
@@ -72,6 +74,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument('--live', action='store_true', help='actually edit (default is a dry run)')
     run.add_argument('--trial', action='store_true',
                      help='allow --live without the bot flag, for a BRFA trial')
+    run.add_argument('--report-only', action='store_true',
+                     help='save the report page and never edit anything else, even with '
+                          "--live; needs no bot flag, since it only edits the bot's own page")
     run.add_argument('--max-edits', type=int, default=100)
     run.add_argument('--cooldown-days', type=int, default=30,
                      help="don't repeat a fix on a page the bot edited this recently (0 = off)")
@@ -106,6 +111,7 @@ def _options(args: argparse.Namespace) -> Options:
         **common,
         live=args.live,
         trial=args.trial,
+        report_only=args.report_only,
         max_edits=args.max_edits,
         cooldown_days=args.cooldown_days,
         templates=tuple(args.template),
@@ -121,7 +127,8 @@ def _connect(args: argparse.Namespace) -> Wiki:
     """Set up Pywikibot and return the wiki to work on."""
     # Dry runs only read, so they work without a user-config.py.
     base = os.environ.get('PYWIKIBOT_DIR', os.getcwd())
-    if not getattr(args, 'live', False) and not os.path.exists(
+    saves = getattr(args, 'live', False) or getattr(args, 'report_only', False)
+    if not saves and not os.path.exists(
             os.path.join(base, 'user-config.py')):
         os.environ.setdefault('PYWIKIBOT_NO_USER_CONFIG', '2')
     import pywikibot
@@ -149,7 +156,8 @@ def _run(args: argparse.Namespace, wiki: Wiki) -> int:
         return 2
     except Exception:
         return 1  # already logged, with the traceback, and put in the report
-    print(report.stats_line(datetime.now(UTC).strftime('%Y-%m-%d %H:%M'), args.live))
+    print(report.stats_line(datetime.now(UTC).strftime('%Y-%m-%d %H:%M'), args.live,
+                            args.report_only))
     return 0
 
 

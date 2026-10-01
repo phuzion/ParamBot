@@ -291,6 +291,118 @@ def test_trial_runs_need_no_bot_right(tmp_path):
     assert wiki.page(opts.report_page).saved
 
 
+# -- reporting only --------------------------------------------------------
+
+def test_reporting_only_saves_the_report_and_nothing_else(tmp_path):
+    # Even with --live, and with neither the bot flag nor --trial.
+    opts = options(live=True, report_only=True, out_dir=str(tmp_path))
+    jane = article('Jane Example')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane)
+    wiki.rights = set()
+    ParamBot(wiki, opts).run()
+    assert wiki.logged_in
+    assert jane.saved == []
+    report_page = wiki.page(opts.report_page)
+    [saved] = report_page.saved
+    assert 'would have made (reporting only) 1 edit.' in saved
+    assert report_page.summaries == [
+        'Updating report (reporting only): 1 edit it would make, 0 pages need review']
+    # The edit it would have made goes to a file, for the operators.
+    [diff] = tmp_path.glob('edits-*.diff')
+    assert '### Jane Example' in diff.read_text(encoding='utf-8')
+    assert list(tmp_path.glob('report-*')) == []
+
+
+@pytest.mark.parametrize('run_page, runs', [('yes', True), ('report', True), ('Report', True),
+                                            ('no', False), ('', False)])
+def test_reporting_only_obeys_the_run_page(tmp_path, run_page, runs):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts, **{opts.run_page: FakePage(opts.run_page, run_page)})
+    if runs:
+        ParamBot(wiki, opts).run()
+        assert wiki.page(opts.report_page).saved
+    else:
+        with pytest.raises(StopRun, match='does not say "yes" or "report"; not running'):
+            ParamBot(wiki, opts).run()
+        assert wiki.page(opts.report_page).saved == []
+
+
+def test_report_on_the_run_page_does_not_let_a_live_run_edit(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    jane = article('Jane Example')
+    wiki = wiki_for(opts, **{opts.run_page: FakePage(opts.run_page, 'report')})
+    wiki.populate(OFFICEHOLDER_CATEGORY, jane)
+    with pytest.raises(StopRun, match='does not say "yes"; not running'):
+        ParamBot(wiki, opts).run()
+    assert jane.saved == []
+
+
+def test_reporting_only_switched_off_mid_run_saves_nothing(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    members = wiki.category_members
+
+    def switched_off_while_polling(*args):
+        wiki.page(opts.run_page).text = 'no'
+        return members(*args)
+    wiki.category_members = switched_off_while_polling
+    ParamBot(wiki, opts).run()
+    assert wiki.page(opts.report_page).saved == []
+    assert len(list(tmp_path.glob('report-*.mediawiki'))) == 1   # written locally instead
+
+
+@pytest.mark.parametrize('changes, refused', [
+    ({'pages': ('Jane Example',)}, '--page'),
+    ({'templates': ('Infobox officeholder',)}, '--template'),
+    ({'any_namespace': True}, '--any-namespace'),
+    ({'rules_files': ('rules.mediawiki',)}, '--rules-file'),
+])
+def test_reporting_only_needs_a_full_run(tmp_path, changes, refused):
+    # A partial report would replace the full one everyone reads.
+    opts = options(report_only=True, out_dir=str(tmp_path), **changes)
+    wiki = wiki_for(opts)
+    with pytest.raises(StopRun, match=f"--report-only doesn't work with {refused}"):
+        ParamBot(wiki, opts).run()
+    assert not wiki.logged_in
+
+
+def test_reporting_only_saves_nowhere_but_the_bots_own_report_page(tmp_path):
+    opts = options(report_only=True, report_page='Wikipedia:Sandbox', out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    with pytest.raises(StopRun, match=f'only ever edits User:{BOT}/Report'):
+        ParamBot(wiki, opts).run()
+    assert not wiki.logged_in
+
+
+def test_reporting_only_can_never_save_an_article(tmp_path):
+    # The last check before any save, whatever else goes wrong.
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    bot = ParamBot(wiki_for(opts), opts)
+    jane = article('Jane Example')
+    with pytest.raises(RuntimeError, match='refused to save Jane Example'):
+        bot._save(jane, fix_wikitext(jane.text, []), 'summary')
+    assert jane.saved == []
+
+
+def test_reporting_only_reports_setup_problems_instead_of_stopping(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    unprotected = FakePage(opts.rules_page, ACTIVE_OFFICEHOLDER)
+    wiki = wiki_for(opts, **{opts.rules_page: unprotected})
+    ParamBot(wiki, opts).run()
+    [saved] = wiki.page(opts.report_page).saved
+    assert '== Setup problems ==' in saved
+    assert '(the rules page) is not protected' in saved
+
+
+def test_reporting_only_needs_the_bot_account(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    wiki.user = 'Someone'
+    with pytest.raises(StopRun, match="Logged in as 'Someone', expected 'ExampleBot'"):
+        ParamBot(wiki, opts).run()
+    assert wiki.page(opts.report_page).saved == []
+
+
 def test_any_namespace_refused_live():
     wiki = FakeWiki()
     with pytest.raises(StopRun, match='dry runs only'):
