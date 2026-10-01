@@ -10,6 +10,8 @@ __all__ = ['Links', 'Report']
 
 HEADER = ('<!-- This page is rewritten by the bot on every run; '
           'edits to it will be lost. -->')
+# The last line: which commit of the bot wrote the report.
+_FOOTER_RE = re.compile(r'\n*<!-- ParamBot [^\n]*-->\s*\Z')
 
 # Characters a page title can't contain, so a name with one isn't linked.
 _NOT_A_TITLE = re.compile(r'[\[\]{}|#<>\n]')
@@ -134,6 +136,7 @@ class Report:
     categories_polled: int = 0
     categories_populated: int = 0
     header: str = ''       # a page to transclude at the top, such as User:ParamBot/Header
+    commit: str = ''       # the git commit the bot ran from, for a comment at the bottom
     links: Links = field(default_factory=Links)
 
     def issue(self, title: str, issue: Issue) -> None:
@@ -190,12 +193,16 @@ class Report:
 
     def render(self, timestamp: str, live: bool, report_only: bool = False) -> str:
         top = [f'{{{{{self.header}}}}}'] if self.header else []
+        bottom = f'<!-- ParamBot {self.commit} -->' if self.commit else ''
         return '\n'.join([*top, HEADER, self.stats_line(timestamp, live, report_only), '',
-                          self.body()])
+                          self.body()]) + bottom
 
     @staticmethod
     def body_of(text: str) -> str:
-        """The body of a previously rendered report (everything after the
-        stats line)."""
+        """The body of a previously rendered report: everything after the
+        stats line, but not the commit at the bottom, so a new commit alone
+        isn't a reason to save.  Compare it with body().rstrip():
+        MediaWiki trims the newlines at the end of a page when it's saved."""
         parts = text.split('\n\n', 1)
-        return parts[1] if len(parts) == 2 else text
+        body = parts[1] if len(parts) == 2 else text
+        return _FOOTER_RE.sub('', body).rstrip()

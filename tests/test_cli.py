@@ -151,6 +151,12 @@ def test_the_mode_comes_from_the_settings_unless_the_command_line_says(mode, fla
             'live': (True, False)}[expected] == (opts.live, opts.report_only)
 
 
+def test_the_wiki_is_the_english_wikipedia_unless_the_command_line_says():
+    # Not user-config.py's: without a mylang, Pywikibot picks test.wikipedia.
+    args = _build_parser().parse_args(['run'])
+    assert (args.lang, args.family) == ('en', 'wikipedia')
+
+
 def test_the_bot_account_comes_from_user_config():
     opts = _run_options(['run'], account='OtherBot')
     assert (opts.bot_user, opts.report_page) == ('OtherBot', 'User:OtherBot/Report')

@@ -55,8 +55,10 @@ replacement.
 6. **Writes the report** to `User:ParamBot/Report`, listing articles that
    need human review, articles it skipped and why, and problems in the rules.
    It starts with `{{User:ParamBot/Header}}`, and links each rules page,
-   template and diff it names. The report is only saved when its contents
-   change.
+   template and diff it names, and ends with a comment naming the git commit
+   of the bot that wrote it, such as `<!-- ParamBot 24cef13 -->`. The report
+   is only saved when its findings change: a new commit alone isn't a reason
+   to save it.
 
 ## Safeguards
 
@@ -303,7 +305,7 @@ Options that apply to every command go before the command name, for example
 | `--bot-user NAME` | the account in `user-config.py`, else `ParamBot` | Account name. Also sets the default names of the bot's pages, under `User:NAME/`. |
 | `--rules-page TITLE` | `[pages] rules`, else `User:<bot-user>/Rules` | The page listing the rules pages. |
 | `--rules-file PATH` | | Read the rules from a local file instead, as if each file were an active rules page. A directory means every `.mediawiki` file in it. Can be repeated. |
-| `--lang`, `--family` | `mylang` and `family` in `user-config.py`, else `en`, `wikipedia` | Wiki to work on. |
+| `--lang`, `--family` | `en`, `wikipedia` | Wiki to work on. Not taken from `user-config.py`, where a missing `mylang` makes Pywikibot quietly pick test.wikipedia. |
 | `-v` | | Verbose logging. |
 
 Options for `run`:
@@ -343,9 +345,9 @@ every setting with its default and what it does. Every setting is optional,
 and the options above override them for one run. A misspelt or unusable
 setting stops the bot before it does anything, saying what's wrong.
 
-The account, the wiki and its language aren't in it: they come from
-`user-config.py`, along with Pywikibot's own settings, such as
-`put_throttle` (seconds between edits).
+The account isn't in it: it comes from `user-config.py`, along with
+Pywikibot's own settings, such as `put_throttle` (seconds between edits). The
+wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 
 | Setting | Default | Meaning |
 |---|---|---|

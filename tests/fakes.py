@@ -99,6 +99,7 @@ class FakePage:
             raise self._save_error
         if self._deleted_before_save and nocreate:
             raise pwb_exc.NoCreateError(0)   # MediaWiki's "missingtitle"
+        self.text = self.text.rstrip()   # as MediaWiki saves it
         self.saved.append(self.text)
         self.summaries.append(summary)
         if self._on_save:

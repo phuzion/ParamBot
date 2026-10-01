@@ -23,15 +23,13 @@ import os
 import sys
 from datetime import UTC, datetime
 
+from . import commit
 from .options import Options
 from .settings import DRY_RUN, LIVE, REPORT_ONLY, Settings, SettingsError, load_settings
 from .wiki import Wiki
 
 # Pywikibot reads its configuration when it's first imported, so the modules
 # that import it are imported inside the functions below, after _connect.
-
-# What Pywikibot's mylang is when user-config.py doesn't set it.
-_NO_LANG = 'language'
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings(args.config)
     except SettingsError as error:
         parser.error(str(error))
+    logging.info('ParamBot %s', commit() or '(not running from a git checkout)')
     if settings.path:
         logging.info('Settings from %s', settings.path)
     if getattr(args, 'any_namespace', False):
@@ -75,8 +74,10 @@ def _build_parser() -> argparse.ArgumentParser:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--config', metavar='FILE',
                         help='the settings file (default: parambot.toml next to user-config.py)')
-    parser.add_argument('--lang', help="default: user-config.py's mylang, else en")
-    parser.add_argument('--family', help="default: user-config.py's family, else wikipedia")
+    # Not from user-config.py: without a mylang there, Pywikibot quietly
+    # picks test.wikipedia.
+    parser.add_argument('--lang', default='en')
+    parser.add_argument('--family', default='wikipedia')
     parser.add_argument('--bot-user',
                         help="bot account name (default: user-config.py's, else ParamBot); "
                              "also sets the default names of the bot's pages")
@@ -182,19 +183,18 @@ def _connect(args: argparse.Namespace, settings: Settings) -> tuple[Wiki, str | 
     import pywikibot
     from pywikibot import config
 
-    from . import __version__
-
-    family = args.family or config.family or 'wikipedia'
-    lang = args.lang or (config.mylang if config.mylang != _NO_LANG else 'en')
+    family, lang = args.family, args.lang
     names = config.usernames.get(family, {})
     account = names.get(lang) or names.get('*')
     if account:
         account = account.split('@')[0]   # a bot password's name goes in user-password.py
     bot_user = args.bot_user or account or Options.bot_user
-    # Wikimedia throttles clients that don't say who they are.
+    # Wikimedia throttles clients that don't say who they are.  The commit
+    # stands in for a version number.
     contact = settings.contact or \
         f'https://{lang}.{family}.org/wiki/User:{bot_user.replace(" ", "_")}'
-    config.user_agent_format = (f'ParamBot/{__version__} ({contact}) '
+    product = f'ParamBot/{running}' if (running := commit()) else 'ParamBot'
+    config.user_agent_format = (f'{product} ({contact}) '
                                 '{pwb} ({revision}) {http_backend} {python}')
     # A floor under the time between API reads, whatever part of the bot asks.
     config.minthrottle = settings.read_delay

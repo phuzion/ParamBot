@@ -3,8 +3,8 @@
 It goes next to Pywikibot's user-config.py: in PYWIKIBOT_DIR, or the current
 directory if that isn't set.  ``--config`` names another file.  Every setting
 is optional, and command-line options override them for one run.  The
-account, the wiki and its language aren't here: they come from
-user-config.py, which Pywikibot logs in with.
+account isn't here: it comes from user-config.py, which Pywikibot logs in
+with.
 
 deploy/parambot.example.toml lists every setting, with its default.
 """

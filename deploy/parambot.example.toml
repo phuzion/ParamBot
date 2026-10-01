@@ -6,8 +6,8 @@
 # default: remove the # in front of a setting to change it. Command-line
 # options override these for one run.
 #
-# The account, the wiki and its language aren't set here: they come from
-# user-config.py, the file Pywikibot logs in with.
+# The account isn't set here: it comes from user-config.py, the file
+# Pywikibot logs in with.
 
 # What a plain "parambot run" does:
 #   "dry-run"      read only: write the report, and the edits it would make,

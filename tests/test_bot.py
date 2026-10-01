@@ -320,12 +320,34 @@ def test_live_run_edits_and_saves_the_report(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unchanged_report_is_not_saved_again(tmp_path):
+def test_unchanged_report_is_not_saved_again(tmp_path, monkeypatch):
     opts = options(live=True, out_dir=str(tmp_path))
     wiki = wiki_for(opts)
     ParamBot(wiki, opts).run()
     ParamBot(wiki, opts).run()
+    # Not for a new commit of the bot alone, either.
+    monkeypatch.setattr('parambot.bot.commit', lambda: 'abcdef0')
+    ParamBot(wiki, opts).run()
     assert len(wiki.page(opts.report_page).saved) == 1
+
+
+def test_the_report_says_which_commit_of_the_bot_wrote_it(tmp_path, monkeypatch):
+    monkeypatch.setattr('parambot.bot.commit', lambda: '24cef13')
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    ParamBot(wiki, opts).run()
+    [saved] = wiki.page(opts.report_page).saved
+    assert saved.endswith('\n<!-- ParamBot 24cef13 -->')
+
+
+def test_no_commit_no_comment(tmp_path, monkeypatch):
+    # Not running from a git checkout.
+    monkeypatch.setattr('parambot.bot.commit', lambda: None)
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    ParamBot(wiki, opts).run()
+    [saved] = wiki.page(opts.report_page).saved
+    assert '<!-- ParamBot' not in saved
 
 
 def test_live_run_needs_the_right_account(tmp_path):

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from pywikibot import exceptions as pwb_exc
 
+from . import commit
 from . import messages as msg
 from .botpages import check_bot_pages
 from .fixer import FixResult, TemplateRules, fix_wikitext
@@ -45,7 +46,7 @@ class ParamBot:
     def __init__(self, wiki: Wiki, options: Options) -> None:
         self.wiki = wiki
         self.options = options
-        self.report = Report(header=options.header_page, links=Links(
+        self.report = Report(header=options.header_page, commit=commit() or '', links=Links(
             index=options.rules_page, other=(msg.PROTECTION_REQUESTS, msg.UNKNOWN_CHECK)))
         self.diffs: list[str] = []
         self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
@@ -429,7 +430,7 @@ class ParamBot:
 
     def _save_report_page(self, text: str) -> None:
         page = self.wiki.page(self.options.report_page)
-        if page.exists() and Report.body_of(page.text) == self.report.body():
+        if page.exists() and Report.body_of(page.text) == self.report.body().rstrip():
             return
         self._check_may_save(page.title())
         if self.options.report_only:

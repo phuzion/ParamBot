@@ -24,7 +24,7 @@ def test_report_roundtrip():
     assert '[[:Foo]]' in text
     assert '{{para|alma_mater}} → {{para|education}}' in text
     assert '* [[:Bar]]: excluded by {{tl|bots}}/{{tl|nobots}}' in text
-    assert Report.body_of(text) == report.body()
+    assert Report.body_of(text) == report.body().rstrip()
     # A new run with the same findings has the same body, so no save is needed.
     later = report.render('2026-09-27 00:00', live=True)
     assert later != text
@@ -51,7 +51,18 @@ def test_setup_errors_and_notes_appear_only_when_there_are_some():
 def test_the_report_starts_with_the_header():
     text = Report(header='User:ExampleBot/Header').render('2026-09-30 00:00', live=True)
     assert text.startswith('{{User:ExampleBot/Header}}\n<!-- This page is rewritten')
-    assert Report.body_of(text) == Report().body()
+    assert Report.body_of(text) == Report().body().rstrip()
+
+
+def test_the_report_ends_with_the_commit():
+    text = Report(commit='24cef13').render('2026-10-01 00:00', live=True)
+    assert text.endswith('== Rules page problems ==\nNone.\n<!-- ParamBot 24cef13 -->')
+    assert Report.body_of(text) == Report().body().rstrip()
+    # A new commit alone isn't a reason to save the report, nor the
+    # newlines MediaWiki trims from the end of a page.
+    newer = Report(commit='abcdef0').render('2026-10-02 00:00', live=True)
+    assert Report.body_of(newer.rstrip()) == Report.body_of(text)
+    assert Report.body_of(Report().render('2026-10-02 00:00', live=True)) == Report.body_of(text)
 
 
 def test_a_problem_links_to_the_rules_page_it_is_about():
