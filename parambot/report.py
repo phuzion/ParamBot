@@ -66,8 +66,8 @@ def _template(name: str) -> str:
 
 def _section(title: str, lines: list[str], intro: str = '') -> list[str]:
     """A report section: a heading, an optional line of explanation, then
-    the lines, or "None." if there aren't any."""
-    return [f'== {title} ==', *([intro] if intro else []), *(lines or ['None.']), '']
+    the lines, or ": ''None''" if there aren't any."""
+    return [f'== {title} ==', *([intro] if intro else []), *(lines or [": ''None''"]), '']
 
 
 @dataclass
