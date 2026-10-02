@@ -33,9 +33,9 @@ def test_report_roundtrip():
 
 def test_empty_report():
     assert Report().body() == (
-        '== Needs human review ==\nNone.\n\n'
-        '== Not edited ==\nNone.\n\n'
-        '== Rules page problems ==\nNone.\n')
+        "== Needs human review ==\n: ''None''\n\n"
+        "== Not edited ==\n: ''None''\n\n"
+        "== Rules page problems ==\n: ''None''\n")
 
 
 def test_setup_errors_and_notes_appear_only_when_there_are_some():
@@ -56,7 +56,7 @@ def test_the_report_starts_with_the_header():
 
 def test_the_report_ends_with_the_commit():
     text = Report(commit='24cef13').render('2026-10-01 00:00', live=True)
-    assert text.endswith('== Rules page problems ==\nNone.\n<!-- ParamBot 24cef13 -->')
+    assert text.endswith("== Rules page problems ==\n: ''None''\n<!-- ParamBot 24cef13 -->")
     assert Report.body_of(text) == Report().body().rstrip()
     # A new commit alone isn't a reason to save the report, nor the
     # newlines MediaWiki trims from the end of a page.
