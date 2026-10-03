@@ -12,11 +12,13 @@ dependencies = [
     # From 11.0, every request waits out a Retry-After from Wikimedia, not
     # only those made when the servers are lagged.
     "pywikibot>=11.0",
-    "mwparserfromhell>=0.6.6",
+    # 0.7.2: what Pywikibot 11.0 needs anyway.
+    "mwparserfromhell>=0.7.2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+# PyYAML is only for the test that checks deploy/jobs.yaml.
+dev = ["pytest", "ruff", "mypy", "coverage>=7.2", "pyyaml"]
 
 [project.scripts]
 parambot = "parambot.cli:main"
@@ -26,6 +28,23 @@ packages = ["parambot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The live tests read the real Wikipedia, so they only run when asked for,
+# with: pytest -m live
+addopts = "-m 'not live'"
+markers = ["live: reads the real English Wikipedia (never edits); run with -m live"]
+
+[tool.coverage.run]
+branch = true
+source = ["parambot"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 95
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 line-length = 100

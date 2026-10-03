@@ -1,11 +1,32 @@
 import io
+import runpy
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+from fakes import (
+    BOT,
+    OFFICEHOLDER_CATEGORY,
+    FakePage,
+    FakeWiki,
+    options,
+    wiki_for,
+)
 
-from parambot.cli import _build_parser, _never_crash_printing, _options, main, scaffold_next_steps
+from parambot.cli import (
+    _account,
+    _build_parser,
+    _never_crash_printing,
+    _options,
+    _user_agent,
+    main,
+    scaffold_next_steps,
+)
 from parambot.options import Options
 from parambot.settings import Settings
+
+ROOT = Path(__file__).parent.parent
 
 
 class Console(io.TextIOWrapper):
@@ -179,3 +200,124 @@ def test_any_namespace_says_how_to_overrule_a_live_mode_setting(tmp_path, capsys
     with pytest.raises(SystemExit):
         main(['--config', str(path), 'run', '--any-namespace', '--page', 'User:X/sandbox'])
     assert 'sets mode = "live": add --dry-run' in capsys.readouterr().err
+
+
+# -- connecting ------------------------------------------------------------
+
+def test_importing_the_cli_does_not_import_pywikibot():
+    # Pywikibot reads its configuration when it's first imported, so it has
+    # to wait until _connect has set the environment up for a dry run.
+    result = subprocess.run(
+        [sys.executable, '-c', 'import sys, parambot.cli; sys.exit("pywikibot" in sys.modules)'],
+        cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('usernames, account', [
+    ({'wikipedia': {'en': 'ParamBot'}}, 'ParamBot'),
+    ({'wikipedia': {'en': 'ParamBot@ReportOnly'}}, 'ParamBot'),   # with a bot password's name
+    ({'wikipedia': {'*': 'ParamBot'}}, 'ParamBot'),               # for every language
+    ({'wikipedia': {'*': 'Other', 'en': 'ParamBot'}}, 'ParamBot'),
+    ({'wikipedia': {'de': 'ParamBot'}}, None),
+    ({'wiktionary': {'en': 'ParamBot'}}, None),
+    ({}, None),
+])
+def test_the_account_user_config_names_for_the_wiki(usernames, account):
+    assert _account(usernames, 'wikipedia', 'en') == account
+
+
+def test_the_user_agent_names_the_commit_and_a_contact():
+    assert _user_agent('', 'en', 'wikipedia', 'Param Bot', '24cef13') == (
+        'ParamBot/24cef13 (https://en.wikipedia.org/wiki/User:Param_Bot) '
+        '{pwb} ({revision}) {http_backend} {python}')
+    # Not from a git checkout, and with a contact from the settings.
+    assert _user_agent('ops@example.org', 'en', 'wikipedia', 'ParamBot', None).startswith(
+        'ParamBot (ops@example.org) {pwb}')
+
+
+# -- the commands, on a fake wiki ------------------------------------------
+
+def run_main(monkeypatch, tmp_path, wiki, *argv):
+    """main(), with the fake wiki for a connection, and no settings file."""
+    monkeypatch.setenv('PYWIKIBOT_DIR', str(tmp_path))
+    monkeypatch.setattr('parambot.cli._connect', lambda args, settings: (wiki, None))
+    return main(['--bot-user', BOT, *argv])
+
+
+def article():
+    return FakePage('Jane Example', '{{Infobox officeholder\n| termstart = 2020\n}}')
+
+
+def test_a_finished_run_exits_with_0_and_prints_what_it_did(monkeypatch, tmp_path, capsys):
+    wiki = wiki_for(options()).populate(OFFICEHOLDER_CATEGORY, article())
+    assert run_main(monkeypatch, tmp_path, wiki, 'run', '--out-dir', str(tmp_path / 'out')) == 0
+    assert capsys.readouterr().out.rstrip().endswith('would have made (dry run) 1 edit.')
+    assert list((tmp_path / 'out').glob('edits-*.diff'))
+
+
+def test_a_run_that_is_switched_off_exits_with_2(monkeypatch, tmp_path):
+    # Anything but 0 gets Toolforge to email the operators.
+    opts = options()
+    wiki = wiki_for(opts, **{opts.run_page: FakePage(opts.run_page, 'no')})
+    assert run_main(monkeypatch, tmp_path, wiki, 'run', '--live', '--out-dir', str(tmp_path)) == 2
+
+
+def test_a_run_stopped_by_an_error_exits_with_1_and_writes_the_report(monkeypatch, tmp_path):
+    wiki = wiki_for(options())
+    wiki.fail_polling = ConnectionError('API down')
+    assert run_main(monkeypatch, tmp_path, wiki, 'run', '--out-dir', str(tmp_path)) == 1
+    [report] = tmp_path.glob('report-*.mediawiki')
+    assert 'ConnectionError: <nowiki>API down</nowiki>' in report.read_text(encoding='utf-8')
+
+
+def test_check_rules_exits_with_0_when_all_is_well(monkeypatch, tmp_path, capsys):
+    assert run_main(monkeypatch, tmp_path, wiki_for(options()), 'check-rules') == 0
+    out = capsys.readouterr().out
+    assert 'SETUP' not in out and 'PROBLEM' not in out
+
+
+def test_check_rules_exits_with_1_and_lists_what_is_wrong(monkeypatch, tmp_path, capsys):
+    opts = options()
+    unprotected = FakePage(opts.rules_page, wiki_for(opts).page(opts.rules_page).text)
+    wiki = wiki_for(opts, **{opts.rules_page: unprotected})
+    assert run_main(monkeypatch, tmp_path, wiki, 'check-rules') == 1
+    assert (f'SETUP   {opts.rules_page} (the rules page) is not protected.'
+            in capsys.readouterr().out)
+
+
+DEPRECATED_CHECK = ('{{#invoke:Check for deprecated parameters|check|_category=[[Category:X]]'
+                    '|imagesize=image_size|_remove=nationality}}')
+
+
+def test_scaffold_prints_a_rules_table_and_where_it_goes(monkeypatch, tmp_path, capsys):
+    wiki = FakeWiki(FakePage('Template:Infobox foo', DEPRECATED_CHECK))
+    assert run_main(monkeypatch, tmp_path, wiki, 'scaffold', 'Infobox foo') == 0
+    out, err = capsys.readouterr()
+    assert out.startswith('{| class="wikitable"\n|+ {{tl|Infobox foo}}\n')
+    assert '| {{para|imagesize}} || {{para|image_size}}' in out
+    assert '| {{para|nationality}} || remove' in out
+    assert f'Put this table on User:{BOT}/Rules/Infobox foo.' in err
+
+
+def test_scaffold_can_read_an_old_revision(monkeypatch, tmp_path, capsys):
+    # From before the deprecated-parameter check was taken out.
+    template = FakePage('Template:Infobox foo', '{{Infobox}}', history={41: DEPRECATED_CHECK})
+    assert run_main(monkeypatch, tmp_path, FakeWiki(template),
+                    'scaffold', 'Infobox foo', '--oldid', '41') == 0
+    assert '{{para|imagesize}}' in capsys.readouterr().out
+
+
+def test_scaffold_without_a_deprecated_check_exits_with_1(monkeypatch, tmp_path, capsys):
+    wiki = FakeWiki(FakePage('Template:Infobox foo', '{{Infobox}}'))
+    assert run_main(monkeypatch, tmp_path, wiki, 'scaffold', 'Infobox foo') == 1
+    assert ('Template:Infobox foo has no {{#invoke:Check for deprecated parameters}} call'
+            in capsys.readouterr().err)
+
+
+def test_python_dash_m_parambot_runs_the_command_line(monkeypatch, capsys):
+    # As the Toolforge job does.
+    monkeypatch.setattr(sys, 'argv', ['parambot', '--help'])
+    with pytest.raises(SystemExit) as stop:
+        runpy.run_module('parambot', run_name='__main__')
+    assert stop.value.code == 0
+    assert 'check-rules' in capsys.readouterr().out

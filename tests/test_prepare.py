@@ -94,6 +94,16 @@ def test_template_without_a_parameter_list_is_switched_off():
     assert 'has no list of accepted parameters' in report.problems[0]
 
 
+def test_template_with_a_pattern_the_bot_cannot_read_is_switched_off():
+    # The pattern might accept the old name, so applying the rules could
+    # rename a parameter the template still uses.
+    source = OFFICEHOLDER_SOURCE.replace(' term_end }}', ' term_end | regexp1 = %f[%a]term }}')
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, source))
+    prepared, report = run_prepare(wiki, officeholder(('termstart', 'term_start')))
+    assert prepared.ready == []
+    assert 'has no list of accepted parameters' in report.problems[0]
+
+
 # -- wrapper templates -----------------------------------------------------
 
 PERSON = 'Template:Infobox person'

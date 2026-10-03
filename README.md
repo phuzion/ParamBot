@@ -262,17 +262,37 @@ pip install -e ".[dev]"
 Before pushing, run the same checks GitHub runs:
 
 ```bash
-ruff check .     # lint
-mypy             # type-check
-pytest           # tests
+ruff check .                         # lint
+mypy                                 # type-check
+coverage run -m pytest               # tests
+coverage report                      # fails below 95% of lines and branches covered
 ```
 
-[GitHub Actions](.github/workflows/tests.yml) runs all three on Python 3.11,
-3.12, 3.13 and 3.14 for every push and every pull request.
+[GitHub Actions](.github/workflows/ci.yml) runs these for every push and
+every pull request:
 
-- **No test touches a real wiki.** They use a fake one from
+- **Lint and type-check.**
+- **The tests, with coverage,** on Python 3.11, 3.12, 3.13 (the version
+  Toolforge runs) and 3.14 on Linux, and on 3.13 on Windows.
+- **The tests with the oldest dependencies** `pyproject.toml` allows
+  (Pywikibot 11.0, mwparserfromhell 0.7.2), so its minimum versions stay
+  true.
+- **The package**: it's built, installed in a clean environment, and run
+  from outside the checkout.
+
+Testing notes:
+
+- **No ordinary test touches a real wiki.** They use a fake one from
   [`tests/fakes.py`](tests/fakes.py), which has the same methods as
-  `parambot.wiki.Wiki`.
+  `parambot.wiki.Wiki`, and stand-ins for Pywikibot in `tests/test_wiki.py`.
+- **`tests/test_live.py`** reads the real English Wikipedia, to catch where
+  it differs from the fake one. It never edits, and only runs when asked
+  for, with `pytest -m live`: run it before deploying. The
+  [Live workflow](.github/workflows/live.yml) runs it every Monday, and by
+  hand from the Actions tab.
+- **`tests/test_deploy.py`** checks that the Toolforge job's command is one
+  the bot understands, that CI tests the job's Python, and that the example
+  `user-config.py` works.
 - **`tests/test_docs.py`** checks every example in the rule-writer
   instructions, and that the example edit in the bot's documentation is
   exactly what the bot does, so keep both in step with the code.
@@ -470,7 +490,8 @@ the templates (`prepare`), then applies the active ones to each article
 | `examples/rules/` | Example rules pages, one per template. |
 | `deploy/` | Toolforge job, and templates for Pywikibot's `user-config.py` and the settings file. |
 | `tests/` | The test suite; `tests/fakes.py` is the fake wiki. |
-| `.github/workflows/tests.yml` | The checks GitHub runs on every push and pull request. |
+| `.github/workflows/ci.yml` | The checks GitHub runs on every push and pull request. |
+| `.github/workflows/live.yml` | The weekly read-only tests against the real Wikipedia. |
 
 ## Status
 

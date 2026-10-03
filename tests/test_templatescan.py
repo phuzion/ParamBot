@@ -85,6 +85,15 @@ def test_known_params_absent():
     assert known_params('{{Infobox|above={{{name|}}}}}') is None
 
 
+@pytest.mark.parametrize('pattern', ['%f[%w]term', '%b()', '[%q]'])
+def test_a_pattern_the_bot_cannot_read_means_no_list(pattern):
+    # It might accept any name at all, so the bot can't tell what the
+    # template accepts, and mustn't guess.
+    source = ('{{#invoke:Check for unknown parameters|check|unknown=[[Category:X]]'
+              f'| name | regexp1 = {pattern} }}}}')
+    assert known_params(source) is None
+
+
 # -- wrapper templates -----------------------------------------------------
 
 # Like Infobox military person and Infobox person.

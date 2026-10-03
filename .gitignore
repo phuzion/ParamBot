@@ -13,3 +13,7 @@ apicache*/
 logs/
 throttle.ctrl
 pywikibot.lwp
+.coverage
+htmlcov/
+build/
+dist/

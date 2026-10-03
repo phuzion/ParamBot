@@ -215,6 +215,63 @@ def test_chains_are_resolved():
     assert rs.renames['b'].new == 'c'
 
 
+def rename_rows(*pairs):
+    rows = '|-\n'.join(f'| {{{{para|{old}}}}} || {{{{para|{new}}}}}\n' for old, new in pairs)
+    return parse_config('{|\n|+ {{tl|T}}\n' + rows + '|}')
+
+
+def test_a_two_rule_loop_is_reported_and_broken():
+    config = rename_rows(('a', 'b'), ('b', 'a'))
+    assert [plain(p) for p in config.problems] == [
+        'T: the rules for "a" go round in a circle (a → b, b → a). The bot ignored that rule.']
+    renames = config.rulesets['T'].renames
+    assert {old: rule.new for old, rule in renames.items()} == {'b': 'a'}
+
+
+def test_a_longer_loop_is_broken_and_no_chain_is_left():
+    # Following chains must never go round for ever, nor leave a rule whose
+    # new name another rule renames again.
+    config = rename_rows(('a', 'b'), ('b', 'c'), ('c', 'a'))
+    assert len(config.problems) == 1 and 'go round in a circle' in config.problems[0]
+    renames = config.rulesets['T'].renames
+    assert 'a' not in renames
+    assert all(rule.new not in renames for rule in renames.values())
+
+
+def test_two_tables_giving_one_template_different_categories():
+    config = parse_config(
+        '{|\n|+ {{tl|T}} watches [[:Category:First]]\n| {{para|a}} || {{para|b}}\n|}\n'
+        '{|\n|+ {{tl|T}} watches [[:Category:Second]]\n| {{para|c}} || {{para|d}}\n|}')
+    [problem] = config.problems
+    assert 'two tables give different categories' in plain(problem)
+    assert config.rulesets['T'].category == 'Category:Second'
+
+
+def test_a_name_with_markup_is_not_used():
+    config = parse_config('{|\n|+ {{tl|T}}\n| {{para|a<br />}} || {{para|b}}\n|-\n'
+                          '| {{para|c}} || {{para|d}}\n|}')
+    [problem] = config.problems
+    assert "Parameter names can't contain markup" in plain(problem)
+    assert set(config.rulesets['T'].renames) == {'c'}
+
+
+def test_a_name_with_more_than_nine_numbers_is_not_used():
+    # Lua patterns have nine captures at most.
+    old, new = 'a#' * 10, 'b#' * 10
+    config = rename_rows((old, new), ('c', 'd'))
+    [problem] = config.problems
+    assert 'has more than nine "#"s' in plain(problem)
+    assert [rule.old for rule in config.rulesets['T'].patterns] == []
+
+
+def test_on_a_rules_page_a_caption_naming_two_templates_is_reported():
+    config = parse_config('{|\n|+ {{tl|T}} and {{tl|U}}\n| {{para|a}} || {{para|b}}\n|}',
+                          template='T')
+    [problem] = config.problems
+    assert 'names more than one template (T, U)' in plain(problem)
+    assert set(config.rulesets) == {'T'}
+
+
 # -- rows that overlap -----------------------------------------------------
 
 def test_rows_that_disagree_are_not_used():

@@ -3,7 +3,7 @@
 import re
 from datetime import UTC, datetime
 
-from parambot.wiki import BATCH, Wiki
+from parambot.wiki import BATCH, Revision, Wiki
 
 
 class Request:
@@ -126,3 +126,145 @@ def test_the_bots_recent_edits_are_looked_up_together():
     assert len(site.queries) == 2
     assert site.queries[0]['ucuser'] == 'ExampleBot'
     assert site.queries[0]['ucend'] == '2026-09-01T00:00:00Z'
+
+
+# -- the account, pages, revisions and categories --------------------------
+
+class Page:
+    """Enough of a Pywikibot page: a title, first letter upper-cased as
+    MediaWiki does."""
+
+    def __init__(self, site, title, ns=0):
+        self.site, self.ns = site, ns
+        self._title = title[:1].upper() + title[1:]
+
+    def title(self, *, with_ns=True):
+        return self._title if with_ns else self._title.partition(':')[2]
+
+
+class Pages(Site):
+    """A site that logs in, loads pages, and answers revision and category
+    queries the way the API does (formatversion=2)."""
+
+    def __init__(self, revisions=(), categories=None, unloadable=()):
+        super().__init__()
+        # {revid: (title, text, model)}; text None if it's hidden.
+        self.revision_data = {revid: rest for revid, *rest in revisions}
+        self.category_data = categories or {}    # title: size, or None if missing
+        self.unloadable = set(unloadable)        # titles preloadpages leaves out
+        self.preloaded = []                      # (pages, groupsize, templates) per call
+        self.logged_in = False
+
+    def login(self):
+        self.logged_in = True
+
+    def username(self):
+        return 'ExampleBot'
+
+    def has_right(self, right):
+        return right == 'bot'
+
+    def preloadpages(self, pages, *, groupsize, templates):
+        self.preloaded.append((len(pages), groupsize, templates))
+        return [page for page in pages if page.title() not in self.unloadable]
+
+    def simple_request(self, **params):
+        self.queries.append(dict(params))
+        if params.get('prop') == 'revisions|info':
+            pages = {}
+            for revid in map(int, params['revids'].split('|')):
+                if revid not in self.revision_data:
+                    continue
+                title, text, model = self.revision_data[revid]
+                main = {'contentmodel': model, **({'content': text} if text is not None else
+                                                  {'texthidden': True})}
+                page = pages.setdefault(title, {'title': title, 'lastrevid': 99,
+                                                'contentmodel': model, 'revisions': []})
+                page['revisions'].append({'revid': revid, 'slots': {'main': main}})
+            return Request({'query': {'pages': list(pages.values())}})
+        if params.get('prop') == 'categoryinfo':
+            pages = []
+            for title in params['titles'].split('|'):
+                size = self.category_data.get(title, 'empty')
+                if size is None:
+                    pages.append({'title': title, 'missing': True})
+                elif size == 'empty':   # the category page exists, but nothing is in it
+                    pages.append({'title': title})
+                else:
+                    pages.append({'title': title, 'categoryinfo': {'pages': size, 'size': size}})
+            return Request({'query': {'pages': pages}})
+        raise AssertionError(f'unexpected query {params}')
+
+
+def test_logging_in_gives_the_account_name():
+    site = Pages()
+    wiki = Wiki(site)
+    assert wiki.login() == 'ExampleBot' and site.logged_in
+    assert wiki.has_right('bot') and not wiki.has_right('sysop')
+
+
+def test_a_page_is_made_in_the_namespace_asked_for(monkeypatch):
+    monkeypatch.setattr('parambot.wiki.pywikibot.Page', Page)
+    page = Wiki(Pages()).page('Infobox person', ns=10)
+    assert (page.title(), page.ns) == ('Infobox person', 10)
+
+
+def test_pages_are_loaded_fifty_at_a_time_with_their_templates_if_asked():
+    site = Pages()
+    pages = [Page(site, f'P{i}') for i in range(3)]
+    assert list(Wiki(site).load(pages, templates=True)) == pages
+    assert site.preloaded == [(3, BATCH, True)]
+
+
+def test_titles_are_loaded_in_one_go_and_found_however_they_were_written(monkeypatch):
+    monkeypatch.setattr('parambot.wiki.pywikibot.Page', Page)
+    site = Pages(unloadable={'User:Gone'})
+    found = Wiki(site).load_titles(['user:ExampleBot/Run', 'User:Gone'])
+    # As asked for, and the page that couldn't be loaded is still there.
+    assert set(found) == {'user:ExampleBot/Run', 'User:Gone'}
+    assert found['user:ExampleBot/Run'].title() == 'User:ExampleBot/Run'
+    assert found['User:Gone'].title() == 'User:Gone'
+    assert site.preloaded == [(2, BATCH, False)]
+
+
+def test_revisions_are_fetched_fifty_at_a_time():
+    site = Pages(revisions=[(revid, f'User:ExampleBot/Rules/T{revid}', f'text {revid}',
+                             'wikitext') for revid in range(1, BATCH + 2)])
+    found = Wiki(site).revisions(range(1, BATCH + 2))
+    assert len(found) == BATCH + 1
+    assert found[7] == Revision(7, 'User:ExampleBot/Rules/T7', 'text 7', 'wikitext', 99)
+    assert len(site.queries) == 2
+
+
+def test_missing_and_hidden_revisions():
+    site = Pages(revisions=[(5, 'User:ExampleBot/Rules/T', None, 'wikitext')])
+    found = Wiki(site).revisions([5, 6])
+    assert set(found) == {5}       # 6 doesn't exist, or was deleted with its page
+    assert found[5].text is None   # its text was hidden
+
+
+def test_category_sizes_fifty_at_a_time():
+    titles = [f'Category:C{i}' for i in range(BATCH + 1)]
+    site = Pages(categories={'Category:C0': 3, 'Category:C1': None, f'Category:C{BATCH}': 1})
+    sizes = Wiki(site).category_sizes(titles)
+    assert (sizes['Category:C0'], sizes['Category:C1'], sizes[f'Category:C{BATCH}']) == (3, None, 1)
+    # A category page with nothing in it has no size to give, so it's left
+    # out, and the bot counts it as empty.
+    assert 'Category:C2' not in sizes
+    assert len(site.queries) == 2
+
+
+def test_category_members_in_the_namespaces_asked_for(monkeypatch):
+    asked = []
+
+    class Category:
+        def __init__(self, site, title):
+            asked.append(title)
+
+        def members(self, *, namespaces):
+            asked.append(namespaces)
+            return iter(['Article'])
+
+    monkeypatch.setattr('parambot.wiki.pywikibot.Category', Category)
+    assert list(Wiki(Pages()).category_members('Category:C', (0,))) == ['Article']
+    assert asked == ['Category:C', [0]]

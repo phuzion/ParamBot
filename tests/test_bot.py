@@ -19,6 +19,7 @@ from fakes import (
     rules_page,
     wiki_for,
 )
+from pywikibot import exceptions as pwb_exc
 
 from parambot import messages as msg
 from parambot.bot import SUMMARY_LIMIT, ParamBot, StopRun, edit_summary
@@ -237,6 +238,26 @@ def test_an_article_deleted_mid_run_is_not_recreated(tmp_path):
     assert report.skipped == [('Deleted', 'page was deleted while the bot was working on it')]
 
 
+@pytest.mark.parametrize('error, reason', [
+    (pwb_exc.EditConflictError(0), msg.SKIP_EDIT_CONFLICT),
+    (pwb_exc.LockedPageError(0), msg.SKIP_PROTECTED),
+    (pwb_exc.OtherPageSaveError(0, 'disallowed by an edit filter'), 'save failed: '),
+])
+def test_a_save_that_fails_is_reported_and_the_run_carries_on(tmp_path, error, reason):
+    # Common on a busy wiki: someone edits the article first, it's protected
+    # after the bot loaded it, or an edit filter stops the edit.
+    opts = options(live=True, out_dir=str(tmp_path))
+    failing, fine = article('Failing', save_error=error), article('Fine')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, failing, fine)
+    report = ParamBot(wiki, opts).run()
+    assert (failing.saved, fine.saved) == ([], [FIXED_TEXT])
+    assert report.edits == 1
+    [(title, why)] = report.skipped
+    assert title == 'Failing' and plain(why).startswith(plain(reason))
+    # Not an error in the run: the next one tries again.
+    assert report.errors == []
+
+
 def test_nobots_is_respected(tmp_path):
     opts = options(out_dir=str(tmp_path))
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Excluded', may_edit=False))
@@ -367,6 +388,24 @@ def test_live_run_needs_the_right_account(tmp_path):
     wiki.user, wiki.rights = BOT, set()
     with pytest.raises(StopRun, match='does not have the bot right'):
         ParamBot(wiki, opts).run()
+
+
+def test_a_page_needing_review_is_reported_and_left_alone(tmp_path):
+    # Both names set, to different values: only a person can say which is right.
+    opts = options(live=True, out_dir=str(tmp_path))
+    both = article('Both set', '{{Infobox officeholder\n| termstart = 2020\n'
+                               '| term_start = 2021\n}}')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, both)
+    report = ParamBot(wiki, opts).run()
+    assert both.saved == [] and report.edits == 0
+    [(title, issue)] = report.issues
+    assert (title, issue.param, issue.target) == ('Both set', 'termstart', 'term_start')
+    report_page = wiki.page(opts.report_page)
+    [saved] = report_page.saved
+    assert ('| [[:Both set]] || [[Template:Infobox officeholder|Infobox officeholder]] '
+            f'([[{opts.rules_page}/Infobox officeholder|rules]]) || {{{{para|termstart}}}} → '
+            '{{para|term_start}} ||') in saved
+    assert report_page.summaries == ['Updating report: 0 edits, 1 page needs review']
 
 
 def test_trial_runs_need_no_bot_right(tmp_path):

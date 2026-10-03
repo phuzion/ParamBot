@@ -21,15 +21,20 @@ import io
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from . import commit
 from .options import Options
 from .settings import DRY_RUN, LIVE, REPORT_ONLY, Settings, SettingsError, load_settings
-from .wiki import Wiki
 
 # Pywikibot reads its configuration when it's first imported, so the modules
-# that import it are imported inside the functions below, after _connect.
+# that import it are imported inside the functions below, once _connect has
+# set the environment up.  tests/test_cli.py checks that importing this
+# module doesn't import Pywikibot.
+if TYPE_CHECKING:
+    from .wiki import Wiki
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -172,7 +177,7 @@ def _options(args: argparse.Namespace, settings: Settings | None = None,
     return Options(**values)
 
 
-def _connect(args: argparse.Namespace, settings: Settings) -> tuple[Wiki, str | None]:
+def _connect(args: argparse.Namespace, settings: Settings) -> tuple['Wiki', str | None]:
     """Set up Pywikibot.  Returns the wiki to work on, and the bot account
     user-config.py names, if it names one."""
     # Dry runs only read, so they work without a user-config.py.
@@ -183,25 +188,37 @@ def _connect(args: argparse.Namespace, settings: Settings) -> tuple[Wiki, str | 
     import pywikibot
     from pywikibot import config
 
-    family, lang = args.family, args.lang
-    names = config.usernames.get(family, {})
-    account = names.get(lang) or names.get('*')
-    if account:
-        account = account.split('@')[0]   # a bot password's name goes in user-password.py
-    bot_user = args.bot_user or account or Options.bot_user
-    # Wikimedia throttles clients that don't say who they are.  The commit
-    # stands in for a version number.
-    contact = settings.contact or \
-        f'https://{lang}.{family}.org/wiki/User:{bot_user.replace(" ", "_")}'
-    product = f'ParamBot/{running}' if (running := commit()) else 'ParamBot'
-    config.user_agent_format = (f'{product} ({contact}) '
-                                '{pwb} ({revision}) {http_backend} {python}')
+    from .wiki import Wiki
+
+    account = _account(config.usernames, args.family, args.lang)
+    config.user_agent_format = _user_agent(
+        settings.contact, args.lang, args.family, args.bot_user or account or Options.bot_user,
+        commit())
     # A floor under the time between API reads, whatever part of the bot asks.
     config.minthrottle = settings.read_delay
-    return Wiki(pywikibot.Site(lang, family)), account
+    return Wiki(pywikibot.Site(args.lang, args.family)), account
 
 
-def _run(args: argparse.Namespace, wiki: Wiki, options: Options) -> int:
+def _account(usernames: Mapping[str, Mapping[str, str]], family: str, lang: str) -> str | None:
+    """The bot account user-config.py's usernames name for the wiki, if any."""
+    names = usernames.get(family, {})
+    account = names.get(lang) or names.get('*')
+    # "ParamBot@name" names a bot password too, but that name goes in
+    # user-password.py: the account is ParamBot.
+    return account.split('@')[0] if account else None
+
+
+def _user_agent(contact: str, lang: str, family: str, bot_user: str,
+                running: str | None) -> str:
+    """Pywikibot's user_agent_format for the bot.  Wikimedia throttles
+    clients that don't say who they are.  The commit it's running from,
+    if it knows it, stands in for a version number."""
+    contact = contact or f'https://{lang}.{family}.org/wiki/User:{bot_user.replace(" ", "_")}'
+    product = f'ParamBot/{running}' if running else 'ParamBot'
+    return f'{product} ({contact}) ' '{pwb} ({revision}) {http_backend} {python}'
+
+
+def _run(args: argparse.Namespace, wiki: 'Wiki', options: Options) -> int:
     from .bot import ParamBot, StopRun
 
     try:
@@ -216,7 +233,7 @@ def _run(args: argparse.Namespace, wiki: Wiki, options: Options) -> int:
     return 0
 
 
-def _check_rules(args: argparse.Namespace, wiki: Wiki, options: Options) -> int:
+def _check_rules(args: argparse.Namespace, wiki: 'Wiki', options: Options) -> int:
     from . import messages as msg
     from .bot import ParamBot
 
@@ -228,7 +245,7 @@ def _check_rules(args: argparse.Namespace, wiki: Wiki, options: Options) -> int:
     return 1 if report.problems or report.setup else 0
 
 
-def _scaffold(args: argparse.Namespace, wiki: Wiki, options: Options) -> int:
+def _scaffold(args: argparse.Namespace, wiki: 'Wiki', options: Options) -> int:
     from .templatescan import scaffold_table
 
     page = wiki.page(args.template, ns=10)

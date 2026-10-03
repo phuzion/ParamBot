@@ -94,6 +94,9 @@ class FakePage:
     def botMayEdit(self):
         return self._may_edit
 
+    def getOldVersion(self, oldid):
+        return self.history[oldid]
+
     def save(self, *, summary, minor, bot, quiet, nocreate=False):
         if self._save_error:
             raise self._save_error
