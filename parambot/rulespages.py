@@ -81,6 +81,17 @@ def read_rules_pages(wiki: Wiki, index: WikiPage, options: Options) -> Config:
     one Config."""
     listing = read_index(index.text, options)
     config = Config(problems=list(listing.problems), pages=sorted(listing.named))
+    try:
+        subpages = wiki.subpages(options.rules_page)
+    except Exception as error:
+        # It's only for a note, so not worth stopping the run for.
+        log.warning("Couldn't list the pages under %s: %s", options.rules_page, error)
+        subpages = []
+    config.unlisted = _unlisted(subpages, listing, options)
+    if config.unlisted:
+        config.notes.append(msg.rules_pages_unlisted(
+            [template_for(title, options.rules_page) for title in config.unlisted],
+            options.rules_page))
     written = parse_config(index.text)
     if written.rulesets or written.problems:
         config.problems.append(msg.rules_on_index(
@@ -106,6 +117,14 @@ def read_rules_pages(wiki: Wiki, index: WikiPage, options: Options) -> Config:
                   ACTIVE if entry.active else INACTIVE)
         sources.append(_Source(entry.title, page_config, entry.active, entry.revision))
     return _combine(sources, config)
+
+
+def _unlisted(subpages: list[str], listing: Listing, options: Options) -> list[str]:
+    """The pages under the index that it doesn't list, such as a new
+    template's rules that nobody has listed yet.  The bot doesn't use them,
+    so the report says so.  Not the instructions, which aren't rules."""
+    listed = {_canonical(title) for title in (*listing.named, options.instructions_page)}
+    return sorted(title for title in subpages if _canonical(title) not in listed)
 
 
 def _unapproved(page: WikiPage, options: Options) -> str:

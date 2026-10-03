@@ -190,6 +190,7 @@ class Config:
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     pages: list[str] = field(default_factory=list)   # the rules pages the index names
+    unlisted: list[str] = field(default_factory=list)   # rules pages it doesn't name
 
 
 def parse_config(text: str, template: str | None = None) -> Config:

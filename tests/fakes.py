@@ -172,6 +172,12 @@ class FakeWiki:
                                             page.latest_revision_id)
         return found
 
+    def subpages(self, title):
+        self.requests['subpages'] += 1
+        return sorted(name for name, page in self.pages.items()
+                      if name.startswith(title + '/') and page.exists()
+                      and not page.isRedirectPage())
+
     def recent_edits(self, user, since):
         # Pages have no history of their own to look at: the bot must ask
         # about its own edits once, not about each page.

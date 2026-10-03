@@ -256,6 +256,14 @@ def test_no_second_edit_within_the_cooldown(tmp_path):
     assert reason.startswith(f'{BOT} already edited this page on ')
 
 
+def test_the_report_links_a_rules_page_nobody_has_listed(tmp_path):
+    opts = options(out_dir=str(tmp_path))
+    wiki = wiki_for(opts).add(rules_page(opts, 'Infobox new', OFFICEHOLDER_RULES, 3001))
+    ParamBot(wiki, opts).run()
+    assert (f"* The [[{opts.rules_page}/Infobox new|Infobox new]] rules page isn't listed on "
+            f'[[{opts.rules_page}]]') in only_report(tmp_path)
+
+
 def test_hundreds_of_articles_cost_no_request_each(tmp_path):
     # A request per article (its history, for the cooldown) would get the
     # bot rate-limited once there were hundreds of them.
@@ -268,7 +276,7 @@ def test_hundreds_of_articles_cost_no_request_each(tmp_path):
     assert [title for title, _ in report.skipped] == ['Recent']
     # The article loads need their templates, for the {{bots}} check.
     assert wiki.requests == {'load': 1, 'redirects': 1, 'load with templates': 1,
-                             'recent_edits': 1}
+                             'recent_edits': 1, 'subpages': 1}
 
 
 def test_error_on_one_page_is_reported_and_the_run_continues(tmp_path):

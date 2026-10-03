@@ -209,7 +209,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 |-
 | ''Rules page problems'' || Anything in the rules the bot couldn't use, and how to fix it. || Fix the rules page it names, then approve the new revision.
 |-
-| ''Notes'' || Things worth knowing: inactive templates, rules pages changed since approval, rules waiting because the template still accepts the old name, and rules that aren't needed because the old name is a map parameter every template with <code>mapframe_args=y</code> accepts. || Usually nothing, but delete the rules that aren't needed.
+| ''Notes'' || Things worth knowing: inactive templates, rules pages that aren't listed on [[User:ParamBot/Rules]] (so aren't used), rules pages changed since approval, rules waiting because the template still accepts the old name, and rules that aren't needed because the old name is a map parameter every template with <code>mapframe_args=y</code> accepts. || Usually nothing, but delete the rules that aren't needed.
 |}
 
 == Stopping it ==

@@ -152,11 +152,48 @@ def test_newer_edits_are_not_used_until_approved():
     config = read(listing(PERSON), person(changed, 2002, history={PERSON_REVISION: PERSON_RULES}))
     assert config.rulesets['Infobox person'].renames['alma_mater'].new == 'education'
     assert config.problems == []
-    assert config.notes == [
+    assert config.notes[-1:] == [   # after the note that Infobox officeholder isn't listed
         f'The Infobox person rules have changed since their approved revision '
         f'({PERSON_REVISION}); the bot is still using that one. Review the changes at '
         f'Special:Diff/{PERSON_REVISION}/2002, and if they\'re right, change the revision on '
         f'{INDEX} to 2002.']
+
+
+def test_a_rules_page_the_index_does_not_list_is_noted():
+    # Such as a new template's rules, waiting for a template editor.  Not the
+    # instructions, the pages the index lists, or a redirect left by a move.
+    new = rules_page(OPTS, 'Infobox new', PERSON_RULES, 3001)
+    moved = rules_page(OPTS, 'Infobox moved', redirect_to=new)
+    config = read(listing(OFFICEHOLDER, inactive=[PERSON]), person(), new, moved)
+    assert config.unlisted == [page('Infobox new')]
+    assert config.notes == [
+        f"The Infobox new rules page isn't listed on {INDEX}, so the bot isn't using it. Once "
+        'a template editor has checked it, they can list it under "== Active ==" or '
+        '"== Inactive ==".']
+    assert set(config.rulesets) == {'Infobox officeholder', 'Infobox person'}
+
+
+def test_a_page_listed_outside_the_headings_is_not_listed():
+    index = listing(OFFICEHOLDER) + f'== See also ==\n* [[{page("Infobox person")}]]\n'
+    config = read(index, person())
+    assert config.unlisted == [page('Infobox person')]
+
+
+def test_a_failed_look_for_unlisted_pages_does_not_stop_the_run(monkeypatch):
+    def broken(wiki, title):
+        raise ConnectionError('API timed out')
+    monkeypatch.setattr('fakes.FakeWiki.subpages', broken)
+    config = read(listing(OFFICEHOLDER), rules_page(OPTS, 'Infobox new', PERSON_RULES, 3001))
+    assert (config.unlisted, config.notes) == ([], [])
+    assert set(config.rulesets) == {'Infobox officeholder'}
+
+
+def test_several_unlisted_rules_pages():
+    config = read(listing(OFFICEHOLDER), person(),
+                  rules_page(OPTS, 'Infobox venue', PERSON_RULES, 3002))
+    assert plain(config.notes[0]).startswith(
+        f"2 rules pages aren't listed on {INDEX}, so the bot isn't using them: Infobox person "
+        'and Infobox venue.')
 
 
 def test_a_rules_page_needs_no_caption():

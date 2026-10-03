@@ -89,6 +89,34 @@ def test_redirects_are_looked_up_fifty_templates_at_a_time():
     assert all(query['rdnamespace'] == 10 for query in site.queries)
 
 
+def test_subpages_are_listed_in_one_go(monkeypatch):
+    class Page:
+        """Enough of a Pywikibot page to split off the namespace."""
+
+        def __init__(self, site, title):
+            self._title = title
+
+        def title(self, *, with_ns=True):
+            return self._title if with_ns else self._title.partition(':')[2]
+
+        def namespace(self):
+            return 2
+
+    class Listing(Site):
+        def allpages(self, **params):
+            self.queries.append(params)
+            return [Page(self, 'User:ExampleBot/Rules/Infobox a'),
+                    Page(self, 'User:ExampleBot/Rules/Instructions')]
+
+    monkeypatch.setattr('parambot.wiki.pywikibot.Page', Page)
+    site = Listing()
+    assert Wiki(site).subpages('User:ExampleBot/Rules') == [
+        'User:ExampleBot/Rules/Infobox a', 'User:ExampleBot/Rules/Instructions']
+    # Pywikibot follows the continuation, 500 or 5,000 titles a request.
+    assert site.queries == [{'prefix': 'ExampleBot/Rules/', 'namespace': 2,
+                             'filterredir': False}]
+
+
 def test_the_bots_recent_edits_are_looked_up_together():
     site = Site(contribs=[('A', '2026-09-28T10:00:00Z'), ('B', '2026-09-27T09:00:00Z'),
                           ('A', '2026-09-20T08:00:00Z')])

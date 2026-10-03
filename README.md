@@ -116,7 +116,9 @@ must be protected. The rules pages it lists, such as
 revision of each that a template editor has approved, and the bot reads
 exactly that revision. An edit to a rules page does nothing until a template
 editor approves the new revision; until then the report notes that the page
-has changed, with a link to the changes.
+has changed, with a link to the changes. A rules page that isn't listed at
+all, such as a new template's, isn't used either, and the report notes that
+too.
 
 The Run page is left open so any editor can stop the bot. The bot adds a note
 to the report if the Run page is protected, if the rules page's protection

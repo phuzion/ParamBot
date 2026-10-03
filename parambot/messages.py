@@ -162,6 +162,17 @@ def rules_on_two_pages(template: str, first: str, second: str) -> str:
             'Put all of its rules on one page.')
 
 
+def rules_pages_unlisted(templates: list[str], index: str) -> str:
+    """Rules pages under the index that it doesn't list, so aren't used."""
+    if len(templates) == 1:
+        return (f"The {templates[0]} rules page isn't listed on {index}, so the bot isn't using "
+                'it. Once a template editor has checked it, they can list it under '
+                '"== Active ==" or "== Inactive ==".')
+    return (f"{count(len(templates), 'rules page')} aren't listed on {index}, so the bot isn't "
+            f'using them: {_and(templates)}. Once a template editor has checked them, they can '
+            'list them under "== Active ==" or "== Inactive ==".')
+
+
 def inactive_rules(templates: list[str]) -> str:
     return f'Inactive, so checked but not used: {", ".join(templates)}.'
 

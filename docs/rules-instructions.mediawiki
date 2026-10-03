@@ -37,7 +37,7 @@ Each template's rules are on a page of their own, named after the template: the 
 # Copy the example table below onto it. In the caption line (the one starting <code>|+</code>), change the template's name to yours.
 # Change the rows so that each one holds an old name and its new name. Each row starts with a <code>|-</code> line; add one row per old name.
 # Save, then find your edit's revision number: in the page's history, click the date of your edit. The number after <code>oldid=</code> in the address is the revision.
-# On this page, add <code><nowiki>* {{User:ParamBot/LinkRule|Template name|revision}}</nowiki></code> under <code>== Inactive ==</code>.
+# On this page, add <code><nowiki>* {{User:ParamBot/LinkRule|Template name|revision}}</nowiki></code> under <code>== Inactive ==</code>. Until it's listed here, the bot doesn't use the page, and the report notes that it isn't listed.
 # After the bot's next run, look at [[User:ParamBot/Report]]. When it lists no problems for the template, move the line to <code>== Active ==</code>.
 
 <syntaxhighlight lang="wikitext">

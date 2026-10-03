@@ -199,7 +199,8 @@ class ParamBot:
         problems put on the report."""
         config = self._load_config()
         self.report.links.rules_pages = {
-            template_for(title, self.options.rules_page): title for title in config.pages}
+            template_for(title, self.options.rules_page): title
+            for title in (*config.pages, *config.unlisted)}
         self.report.problems.extend(config.problems)
         self.report.notes.extend(config.notes)
         if not config.rulesets:

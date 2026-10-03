@@ -109,6 +109,14 @@ class Wiki:
                         page['lastrevid'])
         return found
 
+    def subpages(self, title: str) -> list[str]:
+        """The titles of the pages under title/, without redirects: a
+        request for each 500 of them (5,000 with the bot right)."""
+        parent = pywikibot.Page(self.site, title)
+        return [page.title() for page in self.site.allpages(
+            prefix=parent.title(with_ns=False) + '/', namespace=parent.namespace(),
+            filterredir=False)]
+
     def recent_edits(self, user: str, since: datetime) -> dict[str, datetime]:
         """{title: when user last edited it}, for every page user has edited
         since then: a request per 500 edits (5,000 for bots), rather than a
