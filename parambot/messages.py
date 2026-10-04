@@ -511,6 +511,33 @@ def stopped_at_max_edits(max_edits: int) -> str:
     return f'Stopped after {count(max_edits, "edit")} (max_edits).'
 
 
+# -- a BRFA trial ----------------------------------------------------------
+
+def trial_progress(made: int, limit: int) -> str:
+    return f'BRFA trial: {made} of {count(limit, "edit")} made.'
+
+
+def trial_done(limit: int) -> str:
+    return (f"The trial's {count(limit, 'edit')} have all been made, so this run only reported. "
+            f'Once the trial is over, take {code("[trial] edits")} out of the settings.')
+
+
+def stopped_at_trial_limit(limit: int) -> str:
+    return (f"Stopped: that was the last of the trial's {count(limit, 'edit')}. From now on, "
+            'runs only report.')
+
+
+def trial_count_unreadable(path: str, error: Exception) -> str:
+    return (f"Couldn't read how many trial edits have been made from {code(path)}: "
+            f'{quoted(error)}. It should hold one number: correct it, or delete it to count '
+            'from 0.')
+
+
+def trial_count_unsaved(path: str, error: Exception) -> str:
+    return (f"Couldn't save the count of trial edits to {code(path)}: {quoted(error)}. "
+            "Stopped, so that the trial can't go over its limit.")
+
+
 def too_many_failures(failures: int, error: Exception) -> str:
     return (f'{count(failures, "page")} in a row failed; the last error was '
             f'{type(error).__name__}: {quoted(error)}')

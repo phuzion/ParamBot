@@ -61,6 +61,10 @@ _SCHEMA: dict[str, dict[str, _Setting]] = {
         'read_delay': _Setting(float, 'read_delay', minimum=0),
     },
     'rules': {'protection': _Setting(str, 'rules_protection', choices=PROTECTION_LEVELS)},
+    'trial': {
+        'edits': _Setting(int, 'trial_edits', minimum=0),
+        'count_file': _Setting(str, 'trial_count_file'),
+    },
     'output': {
         'dir': _Setting(str, 'out_dir'),
         'contact': _Setting(str, 'contact'),

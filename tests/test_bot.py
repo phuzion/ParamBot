@@ -22,7 +22,14 @@ from fakes import (
 from pywikibot import exceptions as pwb_exc
 
 from parambot import messages as msg
-from parambot.bot import SUMMARY_LIMIT, ParamBot, StopRun, edit_summary
+from parambot.bot import (
+    SUMMARY_LIMIT,
+    ParamBot,
+    StopRun,
+    edit_summary,
+    read_trial_count,
+    write_trial_count,
+)
 from parambot.fixer import TemplateRules, fix_wikitext
 from parambot.messages import plain
 from parambot.options import Options
@@ -414,6 +421,101 @@ def test_trial_runs_need_no_bot_right(tmp_path):
     wiki.rights = set()
     ParamBot(wiki, opts).run()
     assert wiki.page(opts.report_page).saved
+
+
+# -- a BRFA trial ----------------------------------------------------------
+
+def trial(tmp_path, edits=3, **changes):
+    """A live trial run, unless changes say otherwise."""
+    return options(**{'live': True, 'trial': True, 'trial_edits': edits,
+                      'trial_count_file': str(tmp_path / 'trial-edits.txt'),
+                      'out_dir': str(tmp_path / 'out'), **changes})
+
+
+def count_in(tmp_path):
+    return (tmp_path / 'trial-edits.txt').read_text(encoding='utf-8')
+
+
+def test_a_trial_counts_its_edits_across_runs_and_then_only_reports(tmp_path):
+    opts = trial(tmp_path)
+    first = [article(f'First {i}') for i in range(2)]
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *first)
+    report = ParamBot(wiki, opts).run()
+    assert report.edits == 2 and count_in(tmp_path) == '2\n'
+    assert report.notes[-1] == 'BRFA trial: 2 of 3 edits made.'
+
+    # The next run makes the last edit, and stops.
+    second = [article(f'Second {i}') for i in range(3)]
+    wiki.populate(OFFICEHOLDER_CATEGORY, *second)
+    report = ParamBot(wiki, opts).run()
+    assert [len(page.saved) for page in second] == [1, 0, 0]
+    assert count_in(tmp_path) == '3\n'
+    assert plain(report.notes[-2]) == (
+        "Stopped: that was the last of the trial's 3 edits. From now on, runs only report.")
+    assert report.notes[-1] == 'BRFA trial: 3 of 3 edits made.'
+
+    # After that, runs carry on reporting, and edit no articles.
+    report = ParamBot(wiki, opts).run()
+    assert [len(page.saved) for page in second] == [1, 0, 0]
+    assert count_in(tmp_path) == '3\n'
+    saved = wiki.page(opts.report_page).saved[-1]
+    assert 'would have made (reporting only) 2 edits.' in saved
+    assert "The trial's 3 edits have all been made, so this run only reported." in saved
+    assert 'BRFA trial: 3 of 3 edits made.' in saved
+
+
+def test_max_edits_still_limits_a_run_in_a_trial(tmp_path):
+    opts = trial(tmp_path, edits=10, max_edits=1)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('A'), article('B'))
+    assert ParamBot(wiki, opts).run().edits == 1
+    assert count_in(tmp_path) == '1\n'
+
+
+def test_a_dry_run_in_a_trial_reports_the_count_and_changes_nothing(tmp_path):
+    (tmp_path / 'trial-edits.txt').write_text('2\n', encoding='utf-8')
+    opts = trial(tmp_path, live=False, trial=False)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('A'))
+    report = ParamBot(wiki, opts).run()
+    assert report.notes[-1] == 'BRFA trial: 2 of 3 edits made.'
+    assert count_in(tmp_path) == '2\n'
+
+
+@pytest.mark.parametrize('text', ['lots', '', '-1'])
+def test_a_trial_that_cannot_read_its_count_does_not_edit(tmp_path, text):
+    (tmp_path / 'trial-edits.txt').write_text(text, encoding='utf-8')
+    opts = trial(tmp_path)
+    jane = article('Jane Example')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane)
+    with pytest.raises(StopRun, match="Couldn't read how many trial edits have been made"):
+        ParamBot(wiki, opts).run()
+    assert jane.saved == [] and not wiki.logged_in
+    # A dry run carries on, and says so on the report.
+    dry = trial(tmp_path, live=False, trial=False)
+    report = ParamBot(wiki_for(dry).populate(OFFICEHOLDER_CATEGORY, article('A')), dry).run()
+    assert any("Couldn't read how many trial edits" in note for note in report.notes)
+
+
+def test_a_trial_that_cannot_save_its_count_stops(tmp_path, monkeypatch):
+    def full(path, made):
+        raise OSError('No space left on device')
+    monkeypatch.setattr('parambot.bot.write_trial_count', full)
+    opts = trial(tmp_path)
+    first, second = article('First'), article('Second')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, first, second)
+    with pytest.raises(StopRun, match="Couldn't save the count of trial edits"):
+        ParamBot(wiki, opts).run()
+    assert (len(first.saved), second.saved) == (1, [])
+    # Stopped, so not even the report is saved; it's written locally.
+    assert wiki.page(opts.report_page).saved == []
+    assert list((tmp_path / 'out').glob('report-*.mediawiki'))
+
+
+def test_the_count_is_never_left_half_written(tmp_path):
+    path = str(tmp_path / 'trial-edits.txt')
+    write_trial_count(path, 7)
+    assert read_trial_count(path) == 7
+    assert [p.name for p in tmp_path.iterdir()] == ['trial-edits.txt']   # no .tmp left
+    assert read_trial_count(str(tmp_path / 'none yet.txt')) == 0
 
 
 # -- reporting only --------------------------------------------------------

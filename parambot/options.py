@@ -38,6 +38,11 @@ class Options:
     # The rules page says which rules the bot uses, so a live run won't
     # start unless it's protected at least this much (see PROTECTION_LEVELS).
     rules_protection: str = 'templateeditor'
+    # A BRFA trial: edit at most this many articles, across all runs, then
+    # carry on reporting only.  0: no trial.  The count so far is kept in
+    # trial_count_file, a text file holding one number.
+    trial_edits: int = 0
+    trial_count_file: str = 'trial-edits.txt'
     namespaces: tuple[int, ...] = (0,)
     templates: tuple[str, ...] = ()  # only these templates' rules
     pages: tuple[str, ...] = ()      # only these pages, instead of polling categories

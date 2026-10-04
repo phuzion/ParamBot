@@ -146,6 +146,16 @@ def test_the_command_line_overrides_the_settings():
         0, 2, 'User:ParamBot/Report')
 
 
+def test_the_trial_count_is_kept_next_to_user_config(tmp_path, monkeypatch):
+    # Wherever a run starts from, so that every run adds to the same count.
+    monkeypatch.setenv('PYWIKIBOT_DIR', str(tmp_path))
+    assert Path(_run_options(['run']).trial_count_file) == tmp_path / 'trial-edits.txt'
+    elsewhere = str(tmp_path / 'state' / 'count.txt')
+    settings = Settings({'trial_edits': 100, 'trial_count_file': elsewhere})
+    opts = _run_options(['run'], settings)
+    assert (opts.trial_edits, opts.trial_count_file) == (100, elsewhere)
+
+
 def test_settings_apply_to_check_rules_too():
     opts = _run_options(['check-rules'], SETTINGS)
     assert (opts.report_page, opts.rules_protection) == ('User:ParamBot/Daily report', 'sysop')

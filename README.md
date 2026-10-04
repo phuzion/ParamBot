@@ -136,7 +136,11 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
 - **Large runs are flagged.** There's no limit on edits per run, but a run of
   more than 500 edits (`large_run`) gets a note on the report, so a rule that
   catches more than it should is noticed. `max_edits`, or `--max-edits N`,
-  sets a limit, for example for a BRFA trial.
+  sets a limit for one run.
+- **Trials stop at the number approved.** With `[trial] edits` set, the bot
+  counts its article edits across runs, in a file next to `user-config.py`
+  that it updates after every edit. It stops at the limit, carries on
+  reporting only after that, and shows the count on the report.
 - **Runs end within a day.** A run stops starting new work after 20 hours
   (`max_hours`), so a daily run is done before the next one starts. What's
   left is picked up the next day.
@@ -383,6 +387,8 @@ wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 | `[limits]` `large_run` | `500` | A run with more edits than this gets a note on the report. `0` means never. |
 | `[limits]` `failures_in_a_row` | `5` | Stop the run when this many pages in a row fail. |
 | `[limits]` `read_delay` | `1` | Seconds between API reads, at least. |
+| `[trial]` `edits` | `0` | A BRFA trial: across all runs, edit at most this many articles, then report only. `0` means no trial. |
+| `[trial]` `count_file` | `"trial-edits.txt"` | Where the trial's count is kept, next to `user-config.py` unless the path says otherwise. Delete it, or change the number, to count afresh. |
 | `[rules]` `protection` | `"templateeditor"` | The protection the rules page needs before a live run will start: `"autoconfirmed"`, `"extendedconfirmed"`, `"templateeditor"` or `"sysop"`, or anything stronger. |
 | `[output]` `dir` | `"out"` | Where dry runs, and runs that can't save the report, write their files. |
 | `[output]` `contact` | the bot's user page | A URL or email address for the User-Agent, so Wikimedia can reach the operators. |
@@ -448,8 +454,10 @@ updates, stopping it, trials and common problems.
 
 Until the bot is approved, the job runs with `--report-only`, and
 `User:ParamBot/Run` says `report`: it updates the report every day and edits
-no articles. For a BRFA trial, run by hand first with
-`parambot run --live --trial --max-edits 50`. Once approved, change the job's
+no articles. For a BRFA trial, set `[trial] edits` in `parambot.toml` to the
+number approved, run the job with `--live --trial`, and set the Run page to
+`yes`: see [the operators' guide](docs/operators.md#a-brfa-trial). Once
+approved, change the job's
 `--report-only` to `--live`, and the Run page to `yes`. (Or take
 `--report-only` out of the job and set `mode` in `parambot.toml` instead: the
 job then does what the settings say.)

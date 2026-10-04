@@ -183,24 +183,47 @@ setting. Every setting is listed, with its default, in
 
 ## A BRFA trial
 
-When the Bot Approvals Group approves a trial:
+When the Bot Approvals Group approves a trial, of 100 edits say, let the
+daily job make them, a run at a time.
 
-1. Set User:ParamBot/Run to `yes`.
-2. Check when the daily run is due (`toolforge jobs show parambot`), so the
-   trial doesn't run at the same time.
-3. Start the trial, with `--max-edits` set to the number of edits approved:
+1. Set the trial's size in `~/parambot/parambot.toml`:
 
-   ```bash
-   toolforge jobs run parambot-trial --image python3.13 \
-     --command 'cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --live --trial --max-edits 50'
-   tail -f ~/parambot-trial.err     # Ctrl+C stops watching, not the trial
+   ```toml
+   [trial]
+   edits = 100
    ```
 
-   `--trial` lets it edit without the bot flag. Edits are at least 10
-   seconds apart.
-4. When it's finished, set the Run page back to `report`, run
-   `toolforge jobs delete parambot-trial`, and link the trial edits on the
-   BRFA.
+   If `~/parambot/trial-edits.txt` is left over from an earlier trial, delete
+   it, so the count starts from 0.
+2. Switch the job to live trial runs. In the repository, change
+   `--report-only` in `deploy/jobs.yaml` to `--live --trial`, commit and
+   push. Then on Toolforge:
+
+   ```bash
+   git pull
+   toolforge jobs load deploy/jobs.yaml
+   ```
+
+   `--trial` lets it edit without the bot flag.
+3. Set User:ParamBot/Run to `yes`.
+
+Each run then edits until the count reaches 100. It adds to
+`trial-edits.txt` after every edit, so the count stays right even if a run is
+cut off. The report shows the count, as "BRFA trial: 37 of 100 edits made."
+The run that makes the last edit stops there, and later runs only report, so
+the trial can't go over even if the job keeps running.
+
+```bash
+cat trial-edits.txt                # the count so far
+toolforge jobs restart parambot    # start a run now, rather than waiting a day
+```
+
+When the trial's done:
+
+4. Link the trial edits on the BRFA:
+   [ParamBot's article edits](https://en.wikipedia.org/w/index.php?title=Special:Contributions/ParamBot&namespace=0&limit=500).
+5. Put the job back to `--report-only`, the same way as step 2, set the Run
+   page back to `report`, and take `[trial]` out of `parambot.toml`.
 
 ## After approval
 

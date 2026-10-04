@@ -57,6 +57,16 @@
 # "autoconfirmed" (semi), "extendedconfirmed", "templateeditor", "sysop" (full).
 # protection = "templateeditor"
 
+[trial]
+# A BRFA trial: across all runs, edit at most this many articles, then carry
+# on reporting only, as if with --report-only. The report shows the count.
+# 0 means no trial. Without the bot flag, live runs also need --trial.
+# edits = 0
+# Where the count of trial edits so far is kept: a text file holding one
+# number, next to user-config.py unless the path says otherwise. The bot adds
+# to it after every edit. Delete it, or change the number, to count afresh.
+# count_file = "trial-edits.txt"
+
 [output]
 # Where dry runs, and runs that can't save the report, write their files.
 # dir = "out"

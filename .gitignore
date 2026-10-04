@@ -17,3 +17,4 @@ pywikibot.lwp
 htmlcov/
 build/
 dist/
+trial-edits.txt*

@@ -5,7 +5,7 @@ import logging
 import os
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
 from pywikibot import exceptions as pwb_exc
@@ -51,11 +51,13 @@ class ParamBot:
         self.diffs: list[str] = []
         self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
         self._started = _clock()
+        self._trial_made: int | None = None   # edits made in a BRFA trial, if there is one
 
     # -- a run -------------------------------------------------------------
 
     def run(self) -> Report:
         """Do a run.  Raises StopRun if the bot mustn't run or was stopped."""
+        self._start_trial()
         self._preflight()
         try:
             self._run()
@@ -85,6 +87,42 @@ class ParamBot:
         prepared = prepare(self.wiki, rulesets, self.report)
         self._category_sizes(_by_category(prepared.ready), prepared.wrong_category)
         return self.report
+
+    def _start_trial(self) -> None:
+        """In a BRFA trial, find out how many of its edits have been made.
+        Once they all have, carry on reporting only."""
+        options = self.options
+        if not options.trial_edits:
+            return
+        try:
+            self._trial_made = read_trial_count(options.trial_count_file)
+        except (OSError, ValueError) as error:
+            problem = msg.trial_count_unreadable(options.trial_count_file, error)
+            if options.edits_articles:
+                raise StopRun(problem) from error   # it can't tell how many edits are left
+            self.report.notes.append(problem)
+            return
+        if options.edits_articles and self._trial_made >= options.trial_edits:
+            self.options = replace(options, report_only=True)
+            self.report.notes.append(msg.trial_done(options.trial_edits))
+
+    def _trial_full(self) -> bool:
+        """Whether a run that edits articles has made all the trial's edits."""
+        return (self.options.edits_articles and self._trial_made is not None
+                and self._trial_made >= self.options.trial_edits)
+
+    def _count_trial_edit(self) -> None:
+        """Count an edit towards the trial, at once: a run cut off halfway
+        mustn't lose count."""
+        if self._trial_made is None:
+            return
+        self._trial_made += 1
+        try:
+            write_trial_count(self.options.trial_count_file, self._trial_made)
+        except OSError as error:
+            # Without the count, a later run could go over the trial's limit.
+            raise StopRun(msg.trial_count_unsaved(self.options.trial_count_file, error)) \
+                from error
 
     def _preflight(self) -> None:
         options = self.options
@@ -268,6 +306,9 @@ class ParamBot:
         wrong."""
         failures = 0
         for page in pages:
+            if self._trial_full():
+                self.report.notes.append(msg.stopped_at_trial_limit(self.options.trial_edits))
+                break
             if self.options.max_edits and self.report.edits >= self.options.max_edits:
                 self.report.notes.append(msg.stopped_at_max_edits(self.options.max_edits))
                 break
@@ -370,6 +411,7 @@ class ParamBot:
         else:
             self.report.edits += 1
             log.info('Saved %s', title)
+            self._count_trial_edit()
 
     def _skip(self, title: str, reason: str) -> None:
         log.info('Not editing %s: %s', title, msg.plain(reason))
@@ -403,6 +445,8 @@ class ParamBot:
         if options.large_run and self.report.edits > options.large_run:
             self.report.notes.append(msg.large_run(self.report.edits, options.large_run,
                                                    options.edits_articles))
+        if self._trial_made is not None:
+            self.report.notes.append(msg.trial_progress(self._trial_made, options.trial_edits))
         timestamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M')
         text = self.report.render(timestamp, options.live, options.report_only)
         saved = False
@@ -461,3 +505,26 @@ def _by_category(targets: list[TemplateRules]) -> dict[str, list[TemplateRules]]
     for target in targets:
         by_category.setdefault(target.rules.category, []).append(target)
     return by_category
+
+
+def read_trial_count(path: str) -> int:
+    """How many trial edits have been made, from the count file: 0 if
+    there's no file yet.  Raises ValueError if it doesn't hold a count."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except FileNotFoundError:
+        return 0
+    made = int(text.strip())
+    if made < 0:
+        raise ValueError(f'a count below 0: {made}')
+    return made
+
+
+def write_trial_count(path: str, made: int) -> None:
+    """Save the count, replacing the file in one go, so that it's never
+    left half-written."""
+    temporary = f'{path}.tmp'
+    with open(temporary, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(f'{made}\n')
+    os.replace(temporary, path)

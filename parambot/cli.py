@@ -165,6 +165,11 @@ def _options(args: argparse.Namespace, settings: Settings | None = None,
     if args.rules_page:
         values['rules_page'] = args.rules_page
     values['rules_files'] = tuple(args.rules_file)
+    # The trial's count lives next to user-config.py, unless the path says
+    # otherwise, so that every run on the machine adds to the same count.
+    values['trial_count_file'] = os.path.join(
+        os.environ.get('PYWIKIBOT_DIR', os.getcwd()),
+        values.get('trial_count_file', Options.trial_count_file))
     if args.command == 'run':
         mode = _mode(args, settings)
         values.update(live=mode == LIVE, report_only=mode == REPORT_ONLY, trial=args.trial,
