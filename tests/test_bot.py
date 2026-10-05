@@ -425,11 +425,15 @@ def test_trial_runs_need_no_bot_right(tmp_path):
 
 # -- a BRFA trial ----------------------------------------------------------
 
-def trial(tmp_path, edits=3, **changes):
-    """A live trial run, unless changes say otherwise."""
+def trial(tmp_path, edits=3, count='0', **changes):
+    """A live trial run, unless changes say otherwise.  Its count file is
+    created holding count, unless there's one already, or count is None."""
+    path = tmp_path / 'trial-edits.txt'
+    if count is not None and not path.exists():
+        path.write_text(count, encoding='utf-8')
     return options(**{'live': True, 'trial': True, 'trial_edits': edits,
-                      'trial_count_file': str(tmp_path / 'trial-edits.txt'),
-                      'out_dir': str(tmp_path / 'out'), **changes})
+                      'trial_count_file': str(path), 'out_dir': str(tmp_path / 'out'),
+                      **changes})
 
 
 def count_in(tmp_path):
@@ -480,19 +484,35 @@ def test_a_dry_run_in_a_trial_reports_the_count_and_changes_nothing(tmp_path):
     assert count_in(tmp_path) == '2\n'
 
 
+MODES = {'live': {}, 'report-only': {'report_only': True}, 'dry run': {'live': False}}
+
+
+@pytest.mark.parametrize('mode', MODES)
+def test_a_trial_without_its_count_stops_before_doing_anything(tmp_path, mode, caplog):
+    # Starting a fresh count could take the trial over its limit: the file
+    # may simply be somewhere else.
+    opts = trial(tmp_path, count=None, **MODES[mode])
+    path = str(tmp_path / 'trial-edits.txt')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    with caplog.at_level('INFO', logger='parambot'), \
+            pytest.raises(StopRun, match="There's no count of trial edits at"):
+        ParamBot(wiki, opts).run()
+    assert f'BRFA trial: its count of edits is in {path}' in caplog.messages
+    # Nothing at all: no login, nothing read from the wiki, no report.
+    assert (wiki.logged_in, wiki.loaded_titles, sum(wiki.requests.values())) == (False, [], 0)
+    assert not (tmp_path / 'out').exists()
+
+
+@pytest.mark.parametrize('mode', MODES)
 @pytest.mark.parametrize('text', ['lots', '', '-1'])
-def test_a_trial_that_cannot_read_its_count_does_not_edit(tmp_path, text):
+def test_a_trial_that_cannot_read_its_count_stops_before_doing_anything(tmp_path, text, mode):
     (tmp_path / 'trial-edits.txt').write_text(text, encoding='utf-8')
-    opts = trial(tmp_path)
+    opts = trial(tmp_path, **MODES[mode])
     jane = article('Jane Example')
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane)
     with pytest.raises(StopRun, match="Couldn't read how many trial edits have been made"):
         ParamBot(wiki, opts).run()
     assert jane.saved == [] and not wiki.logged_in
-    # A dry run carries on, and says so on the report.
-    dry = trial(tmp_path, live=False, trial=False)
-    report = ParamBot(wiki_for(dry).populate(OFFICEHOLDER_CATEGORY, article('A')), dry).run()
-    assert any("Couldn't read how many trial edits" in note for note in report.notes)
 
 
 def test_a_trial_that_cannot_save_its_count_stops(tmp_path, monkeypatch):
@@ -510,12 +530,50 @@ def test_a_trial_that_cannot_save_its_count_stops(tmp_path, monkeypatch):
     assert list((tmp_path / 'out').glob('report-*.mediawiki'))
 
 
+BRFA_LINK = f'[[Wikipedia:Bots/Requests for approval/{BOT}|BRFA trial]]: '
+
+
+@pytest.mark.parametrize('changes, trial_summary', [
+    ({}, True),                                            # --trial, with a limit
+    ({'trial_edits': 0}, True),                            # --trial alone
+    ({'trial': False}, True),                              # a limit alone, with the bot flag
+    ({'trial': False, 'trial_edits': 0}, False),           # not a trial
+])
+def test_a_trial_edit_says_so_and_links_the_brfa(tmp_path, changes, trial_summary):
+    opts = trial(tmp_path, **changes)
+    jane = article('Jane Example')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane)
+    ParamBot(wiki, opts).run()
+    [summary] = jane.summaries
+    assert summary.startswith(BRFA_LINK) == trial_summary
+    assert 'Fixing deprecated parameters restored in [[Template:Infobox officeholder' in summary
+
+
+def test_the_brfa_a_trial_links_to_is_a_setting():
+    assert options().brfa_page == f'Wikipedia:Bots/Requests for approval/{BOT}'
+    later = 'Wikipedia:Bots/Requests for approval/ExampleBot 2'
+    assert options(brfa_page=later).brfa_page == later
+
+
+def test_a_long_trial_edit_summary_still_fits():
+    renames = [(f'param{i}', f'new_param{i}') for i in range(60)]
+    text = '{{T|' + '|'.join(f'{old}=x' for old, _ in renames) + '}}'
+    result = fix_wikitext(text, _rules(_table('T', *renames)))
+    summary = edit_summary(result, 'Special:Permalink/1234567890', FAQ,
+                           f'Wikipedia:Bots/Requests for approval/{BOT}')
+    assert len(summary) <= SUMMARY_LIMIT
+    assert summary.startswith(BRFA_LINK + 'Fixing deprecated parameters restored in ')
+    assert summary.endswith('…' ' ([[Special:Permalink/1234567890|rules]] · '
+                            '[[User:ExampleBot/FAQ|FAQ]])')
+
+
 def test_the_count_is_never_left_half_written(tmp_path):
     path = str(tmp_path / 'trial-edits.txt')
     write_trial_count(path, 7)
     assert read_trial_count(path) == 7
     assert [p.name for p in tmp_path.iterdir()] == ['trial-edits.txt']   # no .tmp left
-    assert read_trial_count(str(tmp_path / 'none yet.txt')) == 0
+    with pytest.raises(FileNotFoundError):
+        read_trial_count(str(tmp_path / 'none yet.txt'))
 
 
 # -- reporting only --------------------------------------------------------

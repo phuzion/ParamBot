@@ -193,8 +193,13 @@ daily job make them, a run at a time.
    edits = 100
    ```
 
-   If `~/parambot/trial-edits.txt` is left over from an earlier trial, delete
-   it, so the count starts from 0.
+   Then create the count, starting from 0. The bot won't run without it, so a
+   count in the wrong place can't quietly start again from 0. Every run logs
+   where it looked, as `INFO BRFA trial: its count of edits is in …`.
+
+   ```bash
+   echo 0 > ~/parambot/trial-edits.txt
+   ```
 2. Switch the job to live trial runs. In the repository, change
    `--report-only` in `deploy/jobs.yaml` to `--live --trial`, commit and
    push. Then on Toolforge:
@@ -209,7 +214,9 @@ daily job make them, a run at a time.
 
 Each run then edits until the count reaches 100. It adds to
 `trial-edits.txt` after every edit, so the count stays right even if a run is
-cut off. The report shows the count, as "BRFA trial: 37 of 100 edits made."
+cut off. The report shows the count, as "BRFA trial: 37 of 100 edits made." Each
+edit summary starts with "BRFA trial", linked to the request, so reviewers can
+tell the trial's edits apart.
 The run that makes the last edit stops there, and later runs only report, so
 the trial can't go over even if the job keeps running.
 

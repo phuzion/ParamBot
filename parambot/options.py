@@ -43,6 +43,9 @@ class Options:
     # trial_count_file, a text file holding one number.
     trial_edits: int = 0
     trial_count_file: str = 'trial-edits.txt'
+    # The bot approval request, which a trial edit's summary links to.
+    # Default: Wikipedia:Bots/Requests for approval/<bot_user>.
+    brfa_page: str = ''
     namespaces: tuple[int, ...] = (0,)
     templates: tuple[str, ...] = ()  # only these templates' rules
     pages: tuple[str, ...] = ()      # only these pages, instead of polling categories
@@ -58,6 +61,8 @@ class Options:
         self.faq_page = self.faq_page or f'{base}/FAQ'
         self.header_page = self.header_page or f'{base}/Header'
         self.link_rule_page = self.link_rule_page or f'{base}/LinkRule'
+        self.brfa_page = (self.brfa_page
+                          or f'Wikipedia:Bots/Requests for approval/{self.bot_user}')
         if self.rules_protection not in PROTECTION_LEVELS:
             raise ValueError(f'rules_protection must be one of {", ".join(PROTECTION_LEVELS)}, '
                              f'not {self.rules_protection!r}')
@@ -66,6 +71,11 @@ class Options:
     def edits_articles(self) -> bool:
         """A live run that isn't reporting only: the only kind that edits articles."""
         return self.live and not self.report_only
+
+    @property
+    def in_trial(self) -> bool:
+        """A BRFA trial: --trial, or a limit on its edits in the settings."""
+        return self.trial or self.trial_edits > 0
 
     @property
     def saves_report(self) -> bool:

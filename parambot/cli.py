@@ -224,12 +224,14 @@ def _user_agent(contact: str, lang: str, family: str, bot_user: str,
 
 
 def _run(args: argparse.Namespace, wiki: 'Wiki', options: Options) -> int:
+    from . import messages as msg
     from .bot import ParamBot, StopRun
 
     try:
         report = ParamBot(wiki, options).run()
     except StopRun as stop:
-        logging.error('%s', stop)
+        # Without the report's markup: a log is plain text.
+        logging.error('%s', msg.plain(str(stop)))
         return 2
     except Exception:
         return 1  # already logged, with the traceback, and put in the report

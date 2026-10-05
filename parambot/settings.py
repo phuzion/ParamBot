@@ -64,6 +64,7 @@ _SCHEMA: dict[str, dict[str, _Setting]] = {
     'trial': {
         'edits': _Setting(int, 'trial_edits', minimum=0),
         'count_file': _Setting(str, 'trial_count_file'),
+        'brfa': _Setting(str, 'brfa_page'),
     },
     'output': {
         'dir': _Setting(str, 'out_dir'),

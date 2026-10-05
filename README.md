@@ -139,8 +139,10 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   sets a limit for one run.
 - **Trials stop at the number approved.** With `[trial] edits` set, the bot
   counts its article edits across runs, in a file next to `user-config.py`
-  that it updates after every edit. It stops at the limit, carries on
-  reporting only after that, and shows the count on the report.
+  that it updates after every edit. Every run logs where that file is, and
+  stops before doing anything if it's missing, rather than count from 0. It stops at the limit, carries on
+  reporting only after that, and shows the count on the report. During a
+  trial, every edit summary starts with "BRFA trial", linked to the request.
 - **Runs end within a day.** A run stops starting new work after 20 hours
   (`max_hours`), so a daily run is done before the next one starts. What's
   left is picked up the next day.
@@ -388,7 +390,8 @@ wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 | `[limits]` `failures_in_a_row` | `5` | Stop the run when this many pages in a row fail. |
 | `[limits]` `read_delay` | `1` | Seconds between API reads, at least. |
 | `[trial]` `edits` | `0` | A BRFA trial: across all runs, edit at most this many articles, then report only. `0` means no trial. |
-| `[trial]` `count_file` | `"trial-edits.txt"` | Where the trial's count is kept, next to `user-config.py` unless the path says otherwise. Delete it, or change the number, to count afresh. |
+| `[trial]` `brfa` | `Wikipedia:Bots/Requests for approval/<bot>` | The bot approval request. During a trial (`--trial`, or `edits` set), every edit summary starts with "BRFA trial", linked to it. |
+| `[trial]` `count_file` | `"trial-edits.txt"` | Where the trial's count is kept, next to `user-config.py` unless the path says otherwise. Create it, holding `0`, to start a trial: while `edits` is set, the bot won't run without it. Set it back to `0` to count afresh. |
 | `[rules]` `protection` | `"templateeditor"` | The protection the rules page needs before a live run will start: `"autoconfirmed"`, `"extendedconfirmed"`, `"templateeditor"` or `"sysop"`, or anything stronger. |
 | `[output]` `dir` | `"out"` | Where dry runs, and runs that can't save the report, write their files. |
 | `[output]` `contact` | the bot's user page | A URL or email address for the User-Agent, so Wikimedia can reach the operators. |

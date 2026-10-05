@@ -90,18 +90,20 @@ class ParamBot:
 
     def _start_trial(self) -> None:
         """In a BRFA trial, find out how many of its edits have been made.
-        Once they all have, carry on reporting only."""
+        Once they all have, carry on reporting only.  Without a count it can
+        read, stop before doing anything: a count that's gone missing, or
+        that's in the wrong place, could take the trial over its limit."""
         options = self.options
         if not options.trial_edits:
             return
+        path = os.path.abspath(options.trial_count_file)
+        log.info('BRFA trial: its count of edits is in %s', path)
         try:
-            self._trial_made = read_trial_count(options.trial_count_file)
+            self._trial_made = read_trial_count(path)
+        except FileNotFoundError as error:
+            raise StopRun(msg.trial_count_missing(path)) from error
         except (OSError, ValueError) as error:
-            problem = msg.trial_count_unreadable(options.trial_count_file, error)
-            if options.edits_articles:
-                raise StopRun(problem) from error   # it can't tell how many edits are left
-            self.report.notes.append(problem)
-            return
+            raise StopRun(msg.trial_count_unreadable(path, error)) from error
         if options.edits_articles and self._trial_made >= options.trial_edits:
             self.options = replace(options, report_only=True)
             self.report.notes.append(msg.trial_done(options.trial_edits))
@@ -347,7 +349,8 @@ class ParamBot:
                 log.info('%s: nothing to fix', title)
             return
         reason = self._not_editable(page)
-        summary = edit_summary(result, self._rules_link(result, targets), self.options.faq_page)
+        summary = edit_summary(result, self._rules_link(result, targets), self.options.faq_page,
+                               self.options.brfa_page if self.options.in_trial else None)
         if reason:
             self._skip(title, reason)
         elif self.options.edits_articles:
@@ -487,9 +490,11 @@ class ParamBot:
                   minor=True, bot=self.wiki.has_right('bot'), quiet=True, nocreate=True)
 
 
-def edit_summary(result: FixResult, rules_page: str, faq_page: str) -> str:
+def edit_summary(result: FixResult, rules_page: str, faq_page: str,
+                 brfa: str | None = None) -> str:
     """The summary for an edit: each template's changes, then links to the
-    rules and the FAQ."""
+    rules and the FAQ.  During a BRFA trial, brfa is the request, which the
+    summary links to first."""
     parts = []
     for template in result.templates():
         descriptions: list[str] = []
@@ -497,7 +502,7 @@ def edit_summary(result: FixResult, rules_page: str, faq_page: str) -> str:
             if change.template == template and change.describe() not in descriptions:
                 descriptions.append(change.describe())
         parts.append(f'[[Template:{template}|{template}]]: {", ".join(descriptions)}')
-    return msg.edit_summary(parts, rules_page, faq_page, SUMMARY_LIMIT)
+    return msg.edit_summary(parts, rules_page, faq_page, SUMMARY_LIMIT, brfa)
 
 
 def _by_category(targets: list[TemplateRules]) -> dict[str, list[TemplateRules]]:
@@ -508,13 +513,11 @@ def _by_category(targets: list[TemplateRules]) -> dict[str, list[TemplateRules]]
 
 
 def read_trial_count(path: str) -> int:
-    """How many trial edits have been made, from the count file: 0 if
-    there's no file yet.  Raises ValueError if it doesn't hold a count."""
-    try:
-        with open(path, encoding='utf-8') as f:
-            text = f.read()
-    except FileNotFoundError:
-        return 0
+    """How many trial edits have been made, from the count file.  Raises
+    FileNotFoundError if there's no such file, and ValueError if it doesn't
+    hold a count."""
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
     made = int(text.strip())
     if made < 0:
         raise ValueError(f'a count below 0: {made}')

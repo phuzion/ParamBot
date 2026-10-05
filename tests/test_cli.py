@@ -280,6 +280,21 @@ def test_a_run_stopped_by_an_error_exits_with_1_and_writes_the_report(monkeypatc
     assert 'ConnectionError: <nowiki>API down</nowiki>' in report.read_text(encoding='utf-8')
 
 
+def test_a_trial_without_its_count_file_logs_where_it_looked_and_stops(
+        monkeypatch, tmp_path, caplog):
+    settings = tmp_path / 'parambot.toml'
+    settings.write_text('[trial]\nedits = 3\n', encoding='utf-8')
+    with caplog.at_level('INFO'):
+        assert run_main(monkeypatch, tmp_path, wiki_for(options()),
+                        '--config', str(settings), 'run') == 2
+    path = str(tmp_path / 'trial-edits.txt')
+    assert f'BRFA trial: its count of edits is in {path}' in caplog.messages
+    [stop] = [r.getMessage() for r in caplog.records if r.levelname == 'ERROR']
+    assert stop.startswith(f"There's no count of trial edits at {path}, so the bot stopped")
+    # As plain text: none of the report's private-use markup characters.
+    assert not any('' <= c <= '' for c in stop)
+
+
 def test_check_rules_exits_with_0_when_all_is_well(monkeypatch, tmp_path, capsys):
     assert run_main(monkeypatch, tmp_path, wiki_for(options()), 'check-rules') == 0
     out = capsys.readouterr().out

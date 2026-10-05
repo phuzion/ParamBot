@@ -471,18 +471,21 @@ def several_rules_match(rules: list[str]) -> str:
             'Delete one of those rows, or add a row for this exact name')
 
 
-def edit_summary(parts: list[str], rules_page: str, faq_page: str, limit: int) -> str:
+def edit_summary(parts: list[str], rules_page: str, faq_page: str, limit: int,
+                 brfa: str | None = None) -> str:
     """At most limit characters: what changed, then links to the rules used and
     the FAQ.  A summary too long to fit is cut between changes, so no link in
-    it is left broken."""
+    it is left broken.  brfa: during a BRFA trial, the request, which the
+    summary starts by linking to."""
+    start = f'[[{brfa}|BRFA trial]]: ' if brfa else ''
     links = f' ([[{rules_page}|rules]] · [[{faq_page}|FAQ]])'
     text = 'Fixing deprecated parameters restored in ' + '; '.join(parts)
-    room = limit - len(links)
+    room = limit - len(start) - len(links)
     if len(text) > room:
         cut = text[:room - 1]
         boundary = max(cut.rfind(', '), cut.rfind('; '))
         text = (cut[:boundary] if boundary > 0 else cut.rstrip()) + '…'
-    return text + links
+    return start + text + links
 
 
 def report_summary(edits: int, needing_review: int, report_only: bool = False) -> str:
@@ -527,10 +530,17 @@ def stopped_at_trial_limit(limit: int) -> str:
             'runs only report.')
 
 
+def trial_count_missing(path: str) -> str:
+    return (f"There's no count of trial edits at {code(path)}, so the bot stopped before doing "
+            'anything. To start the trial, create that file, holding 0. If the count is '
+            f'somewhere else, check PYWIKIBOT_DIR, or {code("[trial] count_file")} in the '
+            'settings.')
+
+
 def trial_count_unreadable(path: str, error: Exception) -> str:
     return (f"Couldn't read how many trial edits have been made from {code(path)}: "
-            f'{quoted(error)}. It should hold one number: correct it, or delete it to count '
-            'from 0.')
+            f'{quoted(error)}, so the bot stopped before doing anything. The file should hold '
+            'one number: correct it, or set it to 0 to start the trial again.')
 
 
 def trial_count_unsaved(path: str, error: Exception) -> str:
