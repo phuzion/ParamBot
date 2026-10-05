@@ -293,6 +293,17 @@ def no_parameter_list(template: str, passed_to: Sequence[str] = ()) -> str:
             f'{check} call){wrapped}, so its rules are switched off.')
 
 
+def kept_only_sometimes(template: str, names: Sequence[str]) -> str:
+    """names: what the wrapper template keeps for itself on some pages, and
+    passes on, to a template that doesn't accept them, on others."""
+    one = len(names) == 1
+    return (f'Template:{template} keeps {_and([para(name) for name in names])} for itself on '
+            f'some pages only (an {code("{{#if:...}}")} in its {code("_exclude")} or '
+            f'{code("_reuse")}), and passes {"it" if one else "them"} on to a template that '
+            f"doesn't accept {'it' if one else 'them'} on the rest, so the bot can't tell "
+            'which parameters an article may use. Its rules are switched off.')
+
+
 def rules_for_a_redirect(template: str, actual: str, page: str) -> str:
     where = f' Move them to {page}.' if page else ''
     return (f'Template:{template} redirects to Template:{actual}, which has rules of its own, '

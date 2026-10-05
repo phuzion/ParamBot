@@ -159,12 +159,50 @@ def test_a_wrapper_of_a_wrapper():
     assert '{{lcfirst:Infobox soldier}}' in known.unknown_text
 
 
+def test_a_wrapper_that_keeps_a_name_on_some_pages():
+    # Like Infobox clergy: in child mode, it keeps name for itself too.
+    wrapper = wrapper_call('{{#invoke:Template wrapper|wrap|_template=Infobox person'
+                           '|_exclude={{#if:{{yesno|{{{child|}}}|def=}}|name,}}buried, family'
+                           '|_reuse={{#ifeq:{{{style|}}}|long|motto|crest, motto}}}}')
+    assert wrapper.keeps == {'buried', 'family', 'motto'}
+    assert wrapper.sometimes_keeps == {'name', 'crest'}
+    # Passed on when it isn't kept.
+    assert wrapper.passes('name') == 'name'
+
+
+def test_a_name_kept_on_some_pages_is_accepted_if_the_wrapped_template_accepts_it():
+    wrapper = wrapper_call('{{#invoke:Template wrapper|wrap|_template=Infobox person'
+                           '|_exclude={{#if:{{{child|}}}|name, crest}}}}')
+    known = WrappedParams(wrapper, KnownParams({'name'}))
+    assert 'name' in known
+    # On pages where the wrapper passes crest on, it's unknown; on the
+    # others, it isn't: the bot can't tell.
+    assert known.unsure == {'crest'}
+    # ... and nor can a wrapper of the wrapper.
+    outer = wrapper_call('{{#invoke:Template wrapper|wrap|_template=Infobox clergy}}')
+    assert WrappedParams(outer, known).unsure == {'crest'}
+
+
 @pytest.mark.parametrize('source', [
     '{{Infobox|above={{{name|}}}}}',                                   # not a wrapper
     '{{#invoke:Template wrapper|list|_template=Infobox person}}',       # only shows a call
     '{{#invoke:Template wrapper|wrap|template_name=Infobox person}}',   # wraps nothing
     '{{#invoke:Template wrapper|wrap|_template={{{type|Infobox person}}}}}',
     '{{#invoke:Template wrapper|wrap|_template=Infobox person|_exclude={{{keep|}}}}}',
+    # Conditions it can't follow.
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person'
+    '|_exclude={{#switch:{{{type|}}}|a=name|b=title}}}}',
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person'
+    '|_exclude={{#if:{{{a|}}}|{{{keep|}}}|name}}}}',
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person'
+    '|_exclude={{#if:{{{a|}}}|key=value}}}}',
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person|_exclude='
+    + ''.join(f'{{{{#if:{{{{{{c{i}|}}}}}}|n{i},}}}}' for i in range(5)) + '}}',   # 32 ways
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person'
+    '|_exclude={{#if:{{{a|}}}|a,}}{{#if:{{{b|}}}|b,}}{{#if:{{{c|}}}|c,}}'
+    '|_reuse={{#if:{{{d|}}}|d,}}{{#if:{{{e|}}}|e,}}}}',                 # 32 ways, together
+    '{{#invoke:Template wrapper|wrap|_template=Infobox person'
+    '|_alias-map={{#if:{{{a|}}}|x:y}}}}',                              # only what it keeps
     '{{#if:{{{a|}}}|{{#invoke:Template wrapper|wrap|_template=A}}'
     '|{{#invoke:Template wrapper|wrap|_template=B}}}}',                # it picks one
 ])

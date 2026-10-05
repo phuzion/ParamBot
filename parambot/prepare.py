@@ -72,6 +72,9 @@ def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared
             # break every page it touched, so don't guess.
             report.problems.append(msg.no_parameter_list(ruleset.template, passed_to))
             continue
+        if known.unsure:
+            report.problems.append(msg.kept_only_sometimes(ruleset.template, sorted(known.unsure)))
+            continue
         names = {ruleset.template}
         if ruleset.template in prepared.redirected:
             names.add(prepared.redirected[ruleset.template])

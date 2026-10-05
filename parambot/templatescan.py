@@ -21,7 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 import mwparserfromhell
-from mwparserfromhell.nodes import Template
+from mwparserfromhell.nodes import Template, Text
 from mwparserfromhell.wikicode import Wikicode
 
 from .luapattern import LuaPattern, LuaPatternError
@@ -64,6 +64,9 @@ _WRAPPER_MODULE = 'Template wrapper'
 _NOT_RULES = ('_category', 'ignoreblank', 'preview')  # settings of the deprecated check
 # Module:Template wrapper's own settings, which it doesn't pass on.
 _WRAPPER_SETTINGS = ('_template', '_exclude', '_reuse', '_include-positional', '_alias-map')
+# The ones that name what the wrapper keeps for itself.
+_KEEP_SETTINGS = ('_exclude', '_reuse')
+MAX_VARIANTS = 16   # the values they can take, with {{#if:...}}: any more, the bot won't guess
 
 
 class KnownParams:
@@ -73,7 +76,8 @@ class KnownParams:
     names the module adds for a setting such as ``mapframe_args=y``, with that
     setting: {name: setting}.  ``unknown_text`` is the check's raw
     ``unknown=`` wikitext, which holds the category link for pages with
-    unknown parameters."""
+    unknown parameters.  ``unsure`` are names whose fate the bot can't
+    tell: see WrappedParams."""
 
     def __init__(self, names: Iterable[str] = (), patterns: Iterable[LuaPattern] = (),
                  unknown_text: str | None = None,
@@ -82,6 +86,7 @@ class KnownParams:
         self.patterns = list(patterns)
         self.unknown_text = unknown_text
         self.extras = dict(extras or {})
+        self.unsure: frozenset[str] = frozenset()
 
     def __repr__(self) -> str:
         return (f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns, '
@@ -121,6 +126,9 @@ class Wrapper:
     keeps: frozenset[str]           # |_exclude= and |_reuse=: never passed on
     aliases: Mapping[str, str]      # |_alias-map=: {wrapper's name: other template's}
     args: Mapping[str, str]         # its other settings, such as template_name
+    # Kept on some pages and passed on on others, by an {{#if:...}} in
+    # |_exclude= or |_reuse=, such as Infobox clergy's "name, when child=yes".
+    sometimes_keeps: frozenset[str] = frozenset()
 
     def passes(self, name: str) -> str | None:
         """The name an article's parameter is passed on as, or None if the
@@ -149,12 +157,19 @@ class WrappedParams(KnownParams):
 
     ``unknown_text`` is the wrapped template's, with the settings the
     wrapper gives it filled in, since its category is often named after
-    ``template_name``."""
+    ``template_name``.
+
+    A name the wrapper keeps only sometimes is accepted either way if the
+    wrapped template accepts it too, so it's treated as passed on.  If the
+    wrapped template doesn't, the article may or may not use the name, and
+    it's in ``unsure``."""
 
     def __init__(self, wrapper: Wrapper, inner: KnownParams) -> None:
         super().__init__()
         self.wrapper, self.inner = wrapper, inner
         self.unknown_text = _fill_in(self._check_text(), self._settings())
+        self.unsure = inner.unsure | {name for name in wrapper.sometimes_keeps
+                                      if name not in inner}
 
     def __repr__(self) -> str:
         return f'WrappedParams({self.wrapper.template!r}, {self.inner!r})'
@@ -213,8 +228,17 @@ def wrapper_call(source: str) -> Wrapper | None:
             settings[param_name(param)] = strip_comments(param.value).strip()
     settings = {key: value for key, value in settings.items() if value}
     template = settings.get('_template')
-    if not template or any('{' in settings.get(key, '') for key in _WRAPPER_SETTINGS):
+    if not template or any('{' in settings.get(key, '') for key in _WRAPPER_SETTINGS
+                           if key not in _KEEP_SETTINGS):
         return None
+    # Each value the names it keeps can take, from one article to another.
+    kept: list[set[str]] = [set()]
+    for key in _KEEP_SETTINGS:
+        variants = _variants(settings.get(key, ''))
+        if variants is None or len(kept) * len(variants) > MAX_VARIANTS:
+            return None
+        kept = [names | set(_list(variant)) for names in kept for variant in variants]
+    always = set.intersection(*kept)
     aliases: dict[str, str] = {}
     for pair in _list(settings.get('_alias-map', '')):
         m = re.match(r'(.*?)\s*:\s*(.+)', pair)
@@ -222,9 +246,42 @@ def wrapper_call(source: str) -> Wrapper | None:
             aliases[m.group(1)] = m.group(2)
     return Wrapper(
         template=normalize_template_name(template),
-        keeps=frozenset(_list(settings.get('_exclude', '')) + _list(settings.get('_reuse', ''))),
+        keeps=frozenset(always),
         aliases=aliases,
-        args={key: value for key, value in settings.items() if key not in _WRAPPER_SETTINGS})
+        args={key: value for key, value in settings.items() if key not in _WRAPPER_SETTINGS},
+        sometimes_keeps=frozenset(set.union(*kept) - always))
+
+
+def _variants(value: str) -> list[str] | None:
+    """The values a wrapper setting can take: just the one, unless it has
+    {{#if:...}} or {{#ifeq:...}} parts, which choose for each article.  None
+    if it has anything else in braces, which the bot can't read."""
+    variants = ['']
+    for node in mwparserfromhell.parse(value).nodes:
+        branches = [str(node)] if isinstance(node, Text) else _branches(node)
+        if branches is None or len(variants) * len(branches) > MAX_VARIANTS:
+            return None
+        variants = [variant + branch for variant in variants for branch in branches]
+    return variants
+
+
+def _branches(node: object) -> list[str] | None:
+    """The text each branch of an {{#if:...}} or {{#ifeq:...}} gives, or
+    None if node is anything else, or has braces in its branches."""
+    if not isinstance(node, Template):
+        return None
+    name = str(node.name).strip().lower()
+    if name.startswith('#if:'):
+        first = 0
+    elif name.startswith('#ifeq:'):
+        first = 1   # what it compares with
+    else:
+        return None
+    params = node.params[first:first + 2]
+    if any(param.showkey or '{' in str(param.value) for param in params):
+        return None
+    branches = [str(param.value) for param in params]
+    return branches + [''] * (2 - len(branches))
 
 
 def _list(value: str) -> list[str]:

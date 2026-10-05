@@ -159,6 +159,24 @@ def test_a_wrapper_of_a_template_without_a_list_is_switched_off(person):
         'it passes its parameters on to (Template:Infobox person), so its rules are switched off.']
 
 
+@pytest.mark.parametrize('kept, problems', [
+    # Like Infobox clergy and Infobox medical person: Infobox person accepts
+    # name too, so it doesn't matter which pages the wrapper keeps it on.
+    ('birth_name', []),
+    ('crest', ['Template:Infobox military person keeps "crest" for itself on some pages only '
+               '(an {{#if:...}} in its _exclude or _reuse), and passes it on to a template that '
+               "doesn't accept it on the rest, so the bot can't tell which parameters an article "
+               'may use. Its rules are switched off.']),
+])
+def test_a_wrapper_that_keeps_a_name_on_some_pages(kept, problems):
+    source = MILITARY_PERSON_SOURCE.replace(
+        '_exclude=service_years', f'_exclude={{{{#if:{{{{{{child|}}}}}}|{kept},}}}}service_years')
+    wiki = FakeWiki(FakePage(PERSON, PERSON_SOURCE), FakePage(MILITARY_PERSON, source))
+    prepared, report = run_prepare(wiki, military_person(('serviceyears', 'service_years')))
+    assert len(prepared.ready) == (0 if problems else 1)
+    assert [plain(p) for p in report.problems] == problems
+
+
 def test_many_wrappers_of_one_template_load_it_once():
     # Dozens of templates wrap Infobox settlement.
     wrappers = [FakePage(f'Template:Infobox person {i}', MILITARY_PERSON_SOURCE.replace(
