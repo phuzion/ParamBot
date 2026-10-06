@@ -7,6 +7,7 @@ logic elsewhere short, and lets it be reviewed in one place.
 
 import re
 from collections.abc import Sequence
+from datetime import datetime
 
 AWB_TEMPLATE = 'AWB rename template parameter'
 
@@ -56,6 +57,27 @@ def plain(text: str) -> str:
 def count(n: int, singular: str, plural: str = '') -> str:
     """"1 rule", "2 rules"."""
     return f'{n} {singular if n == 1 else plural or singular + "s"}'
+
+
+def duration(seconds: float) -> str:
+    """"under a minute", "14 minutes", "2 hours 5 minutes"."""
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return 'under a minute'
+    hours, minutes = divmod(minutes, 60)
+    parts = [count(hours, 'hour')] if hours else []
+    return ' '.join(parts + ([count(minutes, 'minute')] if minutes or not hours else []))
+
+
+def run_times(started: datetime, ended: datetime) -> str:
+    """When a run started and ended, and how long it took: "started
+    5 October 2026, 22:12, ended 22:26 (UTC), taking 14 minutes".  The date
+    of the end only if it's another day."""
+    def day(when: datetime) -> str:
+        return f'{when.day} {when:%B %Y}'
+    end = f'{ended:%H:%M}' if ended.date() == started.date() else f'{day(ended)}, {ended:%H:%M}'
+    return (f'started {day(started)}, {started:%H:%M}, ended {end} (UTC), taking '
+            f'{duration((ended - started).total_seconds())}')
 
 
 def excerpt(text: object, limit: int = 60) -> str:
@@ -581,6 +603,22 @@ def wrong_account(user: str, expected: str) -> str:
 
 def no_bot_right(user: str) -> str:
     return f'{user} does not have the bot right; use --trial for BRFA trial edits'
+
+
+def cannot_edit(error_code: str, title: str, bot_user: str) -> str:
+    """A save of title failed in a way every other save would too."""
+    why = {
+        'session-page-restricted':
+            "the bot password it's logged in with may only edit certain pages. Often that's "
+            'a login saved from another bot password, such as a report-only one: delete '
+            f'{code(f"pywikibot-{bot_user}.lwp")}, or reset that bot password, and the next '
+            'run logs in afresh',
+        'blocked': f'{bot_user} is blocked',
+        'autoblocked': f"{bot_user}'s IP address is caught by an autoblock",
+        'readonly': 'the wiki is read-only for now. The next run will try again',
+    }.get(error_code, 'the wiki refuses them')
+    return (f'Stopped before editing any more articles, because saving {title} failed with '
+            f'{code(error_code)}, and every other edit would too: {why}.')
 
 
 def run_page_off(title: str, before: str | None = None, report_only: bool = False) -> str:

@@ -1,13 +1,17 @@
 import inspect
 import re
 import typing
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
 from parambot import messages as msg
 from parambot.fixer import Issue
 from parambot.report import Links, Report
+
+
+def at(*when):
+    return datetime(*when, tzinfo=UTC)
 
 RULES = 'User:ExampleBot/Rules'
 LINKS = Links(index=RULES, other=('Wikipedia:Requests for page protection',),
@@ -20,15 +24,36 @@ def test_report_roundtrip():
     report.issue('Foo', Issue('Infobox person', 'alma_mater', 'education', 'both set'))
     report.skip('Bar', msg.SKIP_EXCLUDED)
     report.problems.append('Template:X does not exist')
-    text = report.render('2026-09-26 00:00', live=True)
+    report.started, report.ended = at(2026, 9, 26, 0, 0), at(2026, 9, 26, 0, 14)
+    text = report.render(live=True)
     assert '[[:Foo]]' in text
     assert '{{para|alma_mater}} → {{para|education}}' in text
     assert '* [[:Bar]]: excluded by {{tl|bots}}/{{tl|nobots}}' in text
-    assert Report.body_of(text) == report.body().rstrip()
-    # A new run with the same findings has the same body, so no save is needed.
-    later = report.render('2026-09-27 00:00', live=True)
-    assert later != text
-    assert Report.body_of(later) == Report.body_of(text)
+    assert text.endswith('\n\n' + report.body())
+
+
+@pytest.mark.parametrize('started, ended, line', [
+    (at(2026, 10, 5, 22, 12), at(2026, 10, 5, 22, 26, 40),
+     'Last run: started 5 October 2026, 22:12, ended 22:26 (UTC), taking 14 minutes.'),
+    # Past midnight: the end has its own date.
+    (at(2026, 10, 5, 23, 50), at(2026, 10, 6, 1, 55),
+     'Last run: started 5 October 2026, 23:50, ended 6 October 2026, 01:55 (UTC), '
+     'taking 2 hours 5 minutes.'),
+    (at(2026, 10, 5, 22, 12), at(2026, 10, 5, 22, 12, 30),
+     'Last run: started 5 October 2026, 22:12, ended 22:12 (UTC), taking under a minute.'),
+])
+def test_the_report_says_when_the_run_started_and_ended_and_how_long_it_took(
+        started, ended, line):
+    report = Report(started=started, ended=ended)
+    assert report.stats_line(live=True).startswith(line + ' Polled ')
+
+
+@pytest.mark.parametrize('seconds, said', [
+    (59, 'under a minute'), (60, '1 minute'), (61 * 60, '1 hour 1 minute'),
+    (2 * 3600, '2 hours'), (20 * 3600 + 59, '20 hours'),
+])
+def test_durations(seconds, said):
+    assert msg.duration(seconds) == said
 
 
 def test_empty_report():
@@ -49,20 +74,13 @@ def test_setup_errors_and_notes_appear_only_when_there_are_some():
 # -- the header and links --------------------------------------------------
 
 def test_the_report_starts_with_the_header():
-    text = Report(header='User:ExampleBot/Header').render('2026-09-30 00:00', live=True)
+    text = Report(header='User:ExampleBot/Header').render(live=True)
     assert text.startswith('{{User:ExampleBot/Header}}\n<!-- This page is rewritten')
-    assert Report.body_of(text) == Report().body().rstrip()
 
 
 def test_the_report_ends_with_the_commit():
-    text = Report(commit='24cef13').render('2026-10-01 00:00', live=True)
+    text = Report(commit='24cef13').render(live=True)
     assert text.endswith("== Rules page problems ==\n: ''None''\n<!-- ParamBot 24cef13 -->")
-    assert Report.body_of(text) == Report().body().rstrip()
-    # A new commit alone isn't a reason to save the report, nor the
-    # newlines MediaWiki trims from the end of a page.
-    newer = Report(commit='abcdef0').render('2026-10-02 00:00', live=True)
-    assert Report.body_of(newer.rstrip()) == Report.body_of(text)
-    assert Report.body_of(Report().render('2026-10-02 00:00', live=True)) == Report.body_of(text)
 
 
 def test_a_problem_links_to_the_rules_page_it_is_about():
@@ -160,7 +178,7 @@ def test_wikitext_in_an_unmarked_message_does_nothing(wikitext):
 def _every_message():
     """(name, text) for every message function, called with sample arguments."""
     samples = {str: 'Infobox person', int: 7, float: 1.5, bool: True, list[str]: ['a', 'b'],
-               Exception: ValueError('boom'), object: 'something'}
+               Exception: ValueError('boom'), object: 'something', datetime: at(2026, 9, 30)}
     skip = {'edit_summary', 'report_summary', 'excerpt', 'count', 'para', 'tl', 'code',
             'quoted', 'plain'}
     for name, function in inspect.getmembers(msg, inspect.isfunction):
@@ -196,7 +214,7 @@ def test_no_message_puts_live_wikitext_on_the_report(name, text):
 ])
 def test_counts_are_singular_or_plural(n, stats, summary):
     report = Report(categories_polled=n, categories_populated=n, pages_checked=n, edits=n)
-    assert report.stats_line('2026-09-30 00:00', live=True).endswith(stats)
+    assert report.stats_line(live=True).endswith(stats)
     assert msg.report_summary(n, n) == summary
 
 

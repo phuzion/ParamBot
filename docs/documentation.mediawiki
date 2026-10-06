@@ -133,7 +133,7 @@ Once a day, ParamBot:
 # '''Fixes each article''' in the categories that have pages. Before each edit, it checks [[User:ParamBot/Run]] again.
 # '''Writes the report''' to [[User:ParamBot/Report]].
 
-It stops early if [[User:ParamBot/Run]] stops saying <code>yes</code>, or if five articles in a row fail with errors. There's no limit on how many edits a run makes, but a run with more than 500 gets a note on the report, so that a rule catching more than it should is noticed. A run stops after 20 hours, so it's always finished before the next day's run starts; whatever is left is done then. During a trial approved at [[WP:BRFA|Bots/Requests for approval]], it counts its edits across runs, stops at the number approved, and shows the count on [[User:ParamBot/Report]]. Each trial edit's summary starts with "BRFA trial", linked to the request.
+It stops early if [[User:ParamBot/Run]] stops saying <code>yes</code>, if five articles in a row fail with errors, or as soon as an edit fails in a way that every other edit would too, such as when the bot is blocked. There's no limit on how many edits a run makes, but a run with more than 500 gets a note on the report, so that a rule catching more than it should is noticed. A run stops after 20 hours, so it's always finished before the next day's run starts; whatever is left is done then. During a trial approved at [[WP:BRFA|Bots/Requests for approval]], it counts its edits across runs, stops at the number approved, and shows the count on [[User:ParamBot/Report]]. Each trial edit's summary starts with "BRFA trial", linked to the request.
 
 == The rules ==
 The bot only knows what the rules tell it. [[User:ParamBot/Rules/Instructions]] explains, step by step, how to write them; this is an overview.
@@ -194,7 +194,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 * the report shows no problems for the template, which is easiest to check by approving the new revision under Inactive first
 
 == The report ==
-[[User:ParamBot/Report]] is rewritten on every run that finds something different; if nothing has changed, it isn't saved, so its "Last run" line shows the last run with new findings. Wherever it names a rules page, a template or a diff, it links to it. Its sections:
+[[User:ParamBot/Report]] is rewritten on every run. Its "Last run" line says when the run started and ended, in UTC, and how long it took, so the page's history is a log of the runs. Wherever it names a rules page, a template or a diff, it links to it. Its sections:
 
 {| class="wikitable"
 ! Section !! What it lists !! What to do

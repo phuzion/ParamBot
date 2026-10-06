@@ -6,6 +6,7 @@ Pages are Pywikibot Page objects; the WikiPage protocol lists the parts of
 them the bot relies on.
 """
 
+import logging
 import re
 import uuid
 from collections.abc import Iterable, Iterator
@@ -14,6 +15,8 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import pywikibot
+
+log = logging.getLogger('parambot')
 
 # An article title to expand templates against, so {{main other}} and the
 # like behave as they would in an article.
@@ -63,8 +66,23 @@ class Wiki:
     # -- the account -------------------------------------------------------
 
     def login(self) -> str:
-        """Log in with the account in user-config.py; return its name."""
-        self.site.login()
+        """Log in with the account in user-config.py; return its name.
+
+        Pywikibot first tries the login saved in its cookie file, and only
+        uses the bot password if that no longer works.  A saved login keeps
+        the grants of the bot password it was made with, even once
+        user-password.py names another, so the log says which it used."""
+        name = str(self.site.username())
+        self.site.login(cookie_only=True)
+        if self.site.logged_in():
+            log.info('Logged in as %s, reusing the saved login in pywikibot-%s.lwp',
+                     name, name)
+        else:
+            self.site.login()
+            if self.site.logged_in():
+                log.info('Logged in as %s with the bot password in user-password.py', name)
+            else:
+                log.warning('Could not log in as %s', name)
         return str(self.site.username())
 
     def has_right(self, right: str) -> bool:

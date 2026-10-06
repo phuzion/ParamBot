@@ -30,8 +30,25 @@ REPORT_VALUES = {'report'}   # lets a report-only run go ahead, but nothing else
 _clock = time.monotonic   # seconds; tests replace it
 
 
+def _now() -> datetime:
+    """The time, for the report's start and end times; tests replace it."""
+    return datetime.now(UTC)
+
+
 class StopRun(Exception):
     """The bot mustn't run, or must stop: the message says why."""
+
+
+# The wiki's error codes for a save that fails in a way every other save in
+# the run would too: going on would only fail page after page.
+CANNOT_EDIT_CODES = frozenset({'session-page-restricted', 'blocked', 'autoblocked',
+                               'readonly'})
+
+
+class CannotEdit(Exception):
+    """A save failed in a way every other save would too: the message says
+    why.  An error in the run, so the report says so and the operators get
+    an email."""
 
 
 @dataclass
@@ -57,6 +74,7 @@ class ParamBot:
 
     def run(self) -> Report:
         """Do a run.  Raises StopRun if the bot mustn't run or was stopped."""
+        self.report.started = _now()
         self._start_trial()
         self._preflight()
         try:
@@ -66,6 +84,11 @@ class ParamBot:
             # wiki edits, not even the report.
             self.report.errors.append(msg.stopped_early(stop))
             self._write_report(local_only=True)
+            raise
+        except CannotEdit as stop:
+            log.error('%s', msg.plain(str(stop)))
+            self.report.errors.append(str(stop))
+            self._write_report()
             raise
         except Exception as error:
             log.exception('Run failed')
@@ -323,7 +346,7 @@ class ParamBot:
                 continue
             try:
                 self._process(page, candidate.targets)
-            except StopRun:
+            except (StopRun, CannotEdit):
                 raise
             except Exception as error:
                 log.exception('Error while processing %s', page.title())
@@ -410,6 +433,11 @@ class ParamBot:
         except pwb_exc.LockedPageError:
             self._skip(title, msg.SKIP_PROTECTED)
         except pwb_exc.PageSaveRelatedError as error:
+            # Pywikibot passes on an error it has no name for as the API's.
+            error_code = getattr(getattr(error, 'reason', None), 'code', None)
+            if error_code in CANNOT_EDIT_CODES:
+                raise CannotEdit(msg.cannot_edit(error_code, title, self.options.bot_user)) \
+                    from error
             self._skip(title, msg.skip_save_failed(error))
         else:
             self.report.edits += 1
@@ -450,8 +478,8 @@ class ParamBot:
                                                    options.edits_articles))
         if self._trial_made is not None:
             self.report.notes.append(msg.trial_progress(self._trial_made, options.trial_edits))
-        timestamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M')
-        text = self.report.render(timestamp, options.live, options.report_only)
+        self.report.ended = _now()
+        text = self.report.render(options.live, options.report_only)
         saved = False
         if options.saves_report and not local_only:
             try:
@@ -477,9 +505,9 @@ class ParamBot:
         log.info('Wrote %s', ' and '.join(paths))
 
     def _save_report_page(self, text: str) -> None:
+        # Saved on every run, so that its first line always gives the
+        # latest run's times, and its history is a log of the runs.
         page = self.wiki.page(self.options.report_page)
-        if page.exists() and Report.body_of(page.text) == self.report.body().rstrip():
-            return
         self._check_may_save(page.title())
         if self.options.report_only:
             # Still switched on?  A live run checks before every edit instead.

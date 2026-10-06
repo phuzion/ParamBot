@@ -56,11 +56,11 @@ replacement.
    rules only, then saves it, or writes a diff in a dry run.
 6. **Writes the report** to `User:ParamBot/Report`, listing articles that
    need human review, articles it skipped and why, and problems in the rules.
-   It starts with `{{User:ParamBot/Header}}`, and links each rules page,
-   template and diff it names, and ends with a comment naming the git commit
-   of the bot that wrote it, such as `<!-- ParamBot 24cef13 -->`. The report
-   is only saved when its findings change: a new commit alone isn't a reason
-   to save it.
+   It starts with `{{User:ParamBot/Header}}`, then when the run started and
+   ended and how long it took, and links each rules page, template and diff
+   it names. It ends with a comment naming the git commit of the bot that
+   wrote it, such as `<!-- ParamBot 24cef13 -->`. It's saved on every run,
+   so its history is a log of the runs.
 
 ## Safeguards
 
@@ -156,7 +156,10 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   and, in a live run, one for each edit, to check the Run page.
 - **Errors are reported.** An error on one page is logged, the page is listed
   as not edited, and the run carries on. Five failures in a row, or any
-  failure outside the page loop, stop the run. The report is still saved, with
+  failure outside the page loop, stop the run. So does the first save that
+  fails in a way every other save would too: the bot password may only edit
+  certain pages (`session-page-restricted`), the bot is blocked, or the wiki
+  is read-only. The report is still saved, with
   an *Errors* section (or written locally if the wiki can't be reached), and
   the process exits with a failure code so Toolforge emails the operator.
 

@@ -1,6 +1,7 @@
 """Whole runs of the bot, on a fake wiki."""
 
 import re
+from datetime import UTC, datetime
 
 import pytest
 from fakes import (
@@ -23,7 +24,9 @@ from pywikibot import exceptions as pwb_exc
 
 from parambot import messages as msg
 from parambot.bot import (
+    CANNOT_EDIT_CODES,
     SUMMARY_LIMIT,
+    CannotEdit,
     ParamBot,
     StopRun,
     edit_summary,
@@ -265,6 +268,35 @@ def test_a_save_that_fails_is_reported_and_the_run_carries_on(tmp_path, error, r
     assert report.errors == []
 
 
+@pytest.mark.parametrize('error_code', sorted(CANNOT_EDIT_CODES))
+def test_a_save_error_every_edit_would_hit_stops_the_run(tmp_path, error_code):
+    # Such as a saved login from a bot password that may only edit the
+    # report: every article would fail the same way, one after another.
+    opts = options(live=True, out_dir=str(tmp_path))
+    error = pwb_exc.OtherPageSaveError(0, pwb_exc.APIError(error_code, 'Not authorized'))
+    failing, untried = article('Failing', save_error=error), article('Untried')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, failing, untried)
+    bot = ParamBot(wiki, opts)
+    with pytest.raises(CannotEdit, match=f'saving Failing failed with .*{error_code}'):
+        bot.run()
+    assert untried.saved == [] and bot.report.edits == 0
+    # On the report, once, rather than as each article in turn.
+    [error_line] = bot.report.errors
+    assert error_code in error_line and bot.report.skipped == []
+    [report] = wiki.pages[opts.report_page].saved
+    assert 'and every other edit would too' in report
+
+
+def test_the_message_for_a_restricted_bot_password_says_what_to_do():
+    message = plain(msg.cannot_edit('session-page-restricted', 'Jane Example', 'ParamBot'))
+    assert message == (
+        'Stopped before editing any more articles, because saving Jane Example failed with '
+        "session-page-restricted, and every other edit would too: the bot password it's "
+        'logged in with may only edit certain pages. Often that\'s a login saved from another '
+        'bot password, such as a report-only one: delete pywikibot-ParamBot.lwp, or reset that '
+        'bot password, and the next run logs in afresh.')
+
+
 def test_nobots_is_respected(tmp_path):
     opts = options(out_dir=str(tmp_path))
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Excluded', may_edit=False))
@@ -305,6 +337,18 @@ def test_hundreds_of_articles_cost_no_request_each(tmp_path):
     # The article loads need their templates, for the {{bots}} check.
     assert wiki.requests == {'load': 1, 'redirects': 1, 'load with templates': 1,
                              'recent_edits': 1, 'subpages': 1}
+
+
+def test_the_report_says_when_the_run_started_and_ended(tmp_path, monkeypatch):
+    times = iter([datetime(2026, 10, 5, 22, 12, tzinfo=UTC),
+                  datetime(2026, 10, 5, 22, 26, tzinfo=UTC)])
+    monkeypatch.setattr('parambot.bot._now', lambda: next(times))
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    ParamBot(wiki, opts).run()
+    [report] = wiki.pages[opts.report_page].saved
+    assert ('Last run: started 5 October 2026, 22:12, ended 22:26 (UTC), taking 14 minutes. '
+            'Polled ') in report
 
 
 def test_error_on_one_page_is_reported_and_the_run_continues(tmp_path):
@@ -356,15 +400,13 @@ def test_live_run_edits_and_saves_the_report(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unchanged_report_is_not_saved_again(tmp_path, monkeypatch):
+def test_the_report_is_saved_on_every_run_even_with_the_same_findings(tmp_path):
+    # So that its first line always says when the latest run was.
     opts = options(live=True, out_dir=str(tmp_path))
     wiki = wiki_for(opts)
     ParamBot(wiki, opts).run()
     ParamBot(wiki, opts).run()
-    # Not for a new commit of the bot alone, either.
-    monkeypatch.setattr('parambot.bot.commit', lambda: 'abcdef0')
-    ParamBot(wiki, opts).run()
-    assert len(wiki.page(opts.report_page).saved) == 1
+    assert len(wiki.page(opts.report_page).saved) == 2
 
 
 def test_the_report_says_which_commit_of_the_bot_wrote_it(tmp_path, monkeypatch):

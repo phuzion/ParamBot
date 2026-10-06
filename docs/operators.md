@@ -52,13 +52,17 @@ Each run:
 
 1. logs which commit of the bot it is, such as `INFO ParamBot 3457b05`, and
    where its settings came from;
-2. checks User:ParamBot/Run, logs in, and checks the bot's pages;
+2. checks User:ParamBot/Run, logs in, and checks the bot's pages. The log
+   says whether it reused the saved login or used the bot password (see
+   [Change the bot password](#change-the-bot-password));
 3. reads the approved rules, checks them against the templates, and polls
    the templates' unknown-parameter categories;
 4. fixes the pages it finds, or, reporting only, works out the fixes and
    writes them to `out/`;
-5. saves User:ParamBot/Report, if what it found has changed. The report's
-   last line names the commit, such as `<!-- ParamBot 3457b05 -->`.
+5. saves User:ParamBot/Report, every run. Its first line says when the run
+   started and ended and how long it took, and its last line names the
+   commit, such as `<!-- ParamBot 3457b05 -->`. So the report's history is a
+   log of the runs.
 
 A run stops starting new work after 20 hours (`max_hours`), so it can't
 still be going when the next one starts.
@@ -284,8 +288,22 @@ each version warns about the other's name.
    [Special:BotPasswords](https://en.wikipedia.org/wiki/Special:BotPasswords).
 2. Put the new one in `~/parambot/user-password.py`, and keep the file
    private: `chmod 600 user-password.py`.
-3. If logging in fails after that, delete `pywikibot-ParamBot.lwp`, the saved
-   login cookies, and the next run logs in afresh.
+3. Delete `pywikibot-ParamBot.lwp`, the saved login cookies, so the next run
+   logs in afresh:
+
+   ```bash
+   rm ~/parambot/pywikibot-ParamBot.lwp
+   ```
+
+Pywikibot reuses the saved login whenever it still works, and only reads
+`user-password.py` when it doesn't. A saved login keeps the grants, and any
+allowed pages, of the bot password it was made with. So after switching
+`user-password.py` to another bot password, such as from a report-only one to
+the full one, the bot carries on as the old one until the saved login ends.
+Deleting the cookies, or resetting the old bot password, ends it. The log
+says which it used: `Logged in as ParamBot, reusing the saved login in
+pywikibot-ParamBot.lwp`, or `Logged in as ParamBot with the bot password in
+user-password.py`.
 
 ### Log files
 
@@ -306,8 +324,11 @@ Toolforge plans to stop writing job logs to files. After that, read them with
 | `User:ParamBot/Run no longer says "yes"; stopped before editing …` | It was switched off during a run. | The same. |
 | `Logged in as 'X', expected 'ParamBot'` | `user-config.py` or `user-password.py` is for another account. | Fix them. |
 | `ParamBot does not have the bot right; use --trial for BRFA trial edits` | A live run without the bot flag, or without the bot password's *High-volume (bot) access* grant. | Use `--trial` for a trial; otherwise check the flag and the grant. |
+| `Stopped before editing any more articles, because saving … failed with session-page-restricted`, in the log and under *Errors* on the report | The bot is logged in with a bot password that may only edit certain pages, often a saved login from an old one, such as a report-only password. The report saves; articles don't. The run stops at the first article, with exit code 1. | Delete `pywikibot-ParamBot.lwp`, or reset the old bot password: see [Change the bot password](#change-the-bot-password). The log's `Logged in as …` line says which login it used. |
+| `Stopped before editing any more articles, because saving … failed with blocked` (or `autoblocked`, or `readonly`) | The bot is blocked, its IP address is caught by an autoblock, or the wiki is read-only. Every other edit would fail too, so it stopped. | For a block, see the block log and its reason before doing anything else. A read-only wiki is temporary: the next run tries again. |
+| `Could not log in as ParamBot` | Neither the saved login nor the bot password worked. | Check `user-config.py` and `user-password.py`, and the bot password at Special:BotPasswords. |
 | `parambot: error: …/parambot.toml: …` | A mistake in the settings file. | Fix the setting it names. |
 | `Not running, because of problems with the bot's pages:` | A live run's checks failed, for example the rules page isn't protected enough. | Fix what it lists. [Check the pages](#check-the-bots-pages-and-the-rules) lists the same problems. |
 | `5 pages in a row failed` | Something bigger is wrong, often with the wiki's API. | Look at the errors before it. The next run tries again. |
 | HTTP 429 or 403 errors | Wikimedia is slowing or blocking the bot's requests. | Raise `read_delay` in `parambot.toml`. |
-| The report hasn't changed | It's only saved when what the bot finds changes. | `tail ~/parambot.out` shows each run's summary. |
+| The report wasn't saved by the latest run | The run didn't get that far: it refused to start, was switched off, or couldn't save the page. | `toolforge jobs show parambot` and the end of `~/parambot.err` say why. A report it couldn't save is in `out/`. |

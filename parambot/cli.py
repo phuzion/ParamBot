@@ -22,7 +22,6 @@ import logging
 import os
 import sys
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from . import commit
@@ -235,8 +234,7 @@ def _run(args: argparse.Namespace, wiki: 'Wiki', options: Options) -> int:
         return 2
     except Exception:
         return 1  # already logged, with the traceback, and put in the report
-    print(report.stats_line(datetime.now(UTC).strftime('%Y-%m-%d %H:%M'), options.live,
-                            options.report_only))
+    print(report.stats_line(options.live, options.report_only))
     return 0
 
 

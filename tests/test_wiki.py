@@ -153,10 +153,22 @@ class Pages(Site):
         self.category_data = categories or {}    # title: size, or None if missing
         self.unloadable = set(unloadable)        # titles preloadpages leaves out
         self.preloaded = []                      # (pages, groupsize, templates) per call
-        self.logged_in = False
+        self.saved_login = False    # whether the cookie file holds a login that works
+        self.password_works = True
+        self.logins = []            # cookie_only, per call to login()
+        self.session = None         # 'saved' or 'password', once logged in
 
-    def login(self):
-        self.logged_in = True
+    def login(self, cookie_only=False):
+        self.logins.append(cookie_only)
+        if self.session:
+            return
+        if self.saved_login:
+            self.session = 'saved'
+        elif not cookie_only and self.password_works:
+            self.session = 'password'
+
+    def logged_in(self):
+        return self.session is not None
 
     def username(self):
         return 'ExampleBot'
@@ -196,11 +208,35 @@ class Pages(Site):
         raise AssertionError(f'unexpected query {params}')
 
 
-def test_logging_in_gives_the_account_name():
+def test_logging_in_gives_the_account_name(caplog):
     site = Pages()
     wiki = Wiki(site)
-    assert wiki.login() == 'ExampleBot' and site.logged_in
+    with caplog.at_level('INFO', 'parambot'):
+        assert wiki.login() == 'ExampleBot'
+    assert site.session == 'password'
+    assert caplog.messages == ['Logged in as ExampleBot with the bot password in user-password.py']
     assert wiki.has_right('bot') and not wiki.has_right('sysop')
+
+
+def test_the_log_says_when_a_saved_login_is_reused(caplog):
+    # A saved login keeps the grants of the bot password it was made with,
+    # whatever user-password.py says now, so the operators need to know.
+    site = Pages()
+    site.saved_login = True
+    with caplog.at_level('INFO', 'parambot'):
+        Wiki(site).login()
+    assert site.session == 'saved' and site.logins == [True]
+    assert caplog.messages == [
+        'Logged in as ExampleBot, reusing the saved login in pywikibot-ExampleBot.lwp']
+
+
+def test_the_log_says_when_logging_in_fails(caplog):
+    site = Pages()
+    site.password_works = False
+    with caplog.at_level('INFO', 'parambot'):
+        Wiki(site).login()
+    assert site.logins == [True, False]
+    assert caplog.messages == ['Could not log in as ExampleBot']
 
 
 def test_a_page_is_made_in_the_namespace_asked_for(monkeypatch):

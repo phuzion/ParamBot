@@ -2,16 +2,15 @@
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from .fixer import Issue
-from .messages import CODE, MARKED_RE, PARA, QUOTED, TL, count
+from .messages import CODE, MARKED_RE, PARA, QUOTED, TL, count, run_times
 
 __all__ = ['Links', 'Report']
 
 HEADER = ('<!-- This page is rewritten by the bot on every run; '
           'edits to it will be lost. -->')
-# The last line: which commit of the bot wrote the report.
-_FOOTER_RE = re.compile(r'\n*<!-- ParamBot [^\n]*-->\s*\Z')
 
 # Characters a page title can't contain, so a name with one isn't linked.
 _NOT_A_TITLE = re.compile(r'[\[\]{}|#<>\n]')
@@ -138,6 +137,8 @@ class Report:
     header: str = ''       # a page to transclude at the top, such as User:ParamBot/Header
     commit: str = ''       # the git commit the bot ran from, for a comment at the bottom
     links: Links = field(default_factory=Links)
+    started: datetime | None = None   # when the run started, in UTC
+    ended: datetime | None = None     # when it ended: when the report was written
 
     def issue(self, title: str, issue: Issue) -> None:
         self.issues.append((title, issue))
@@ -145,18 +146,21 @@ class Report:
     def skip(self, title: str, reason: str) -> None:
         self.skipped.append((title, reason))
 
-    def stats_line(self, timestamp: str, live: bool, report_only: bool = False) -> str:
+    def stats_line(self, live: bool, report_only: bool = False) -> str:
+        """The line at the top: when the run was, and what it did."""
         if report_only:
             verb = 'would have made (reporting only)'
         else:
             verb = 'made' if live else 'would have made (dry run)'
-        return (f'Last run: {timestamp} (UTC). Polled '
+        when = (run_times(self.started, self.ended) if self.started and self.ended
+                else 'time not recorded')
+        return (f'Last run: {when}. Polled '
                 f'{count(self.categories_polled, "category", "categories")}, '
                 f'{self.categories_populated} populated; checked '
                 f'{count(self.pages_checked, "page")}; {verb} {count(self.edits, "edit")}.')
 
     def body(self) -> str:
-        """The report without the stats line, for deciding whether to save."""
+        """The report's sections: everything below the stats line."""
         out: list[str] = []
         # These two only appear when something is wrong.
         if self.setup:
@@ -191,18 +195,8 @@ class Report:
                             f'|| {self.links.wikitext(issue.reason)}']
         return [*lines, '|}']
 
-    def render(self, timestamp: str, live: bool, report_only: bool = False) -> str:
+    def render(self, live: bool, report_only: bool = False) -> str:
         top = [f'{{{{{self.header}}}}}'] if self.header else []
         bottom = f'<!-- ParamBot {self.commit} -->' if self.commit else ''
-        return '\n'.join([*top, HEADER, self.stats_line(timestamp, live, report_only), '',
+        return '\n'.join([*top, HEADER, self.stats_line(live, report_only), '',
                           self.body()]) + bottom
-
-    @staticmethod
-    def body_of(text: str) -> str:
-        """The body of a previously rendered report: everything after the
-        stats line, but not the commit at the bottom, so a new commit alone
-        isn't a reason to save.  Compare it with body().rstrip():
-        MediaWiki trims the newlines at the end of a page when it's saved."""
-        parts = text.split('\n\n', 1)
-        body = parts[1] if len(parts) == 2 else text
-        return _FOOTER_RE.sub('', body).rstrip()
