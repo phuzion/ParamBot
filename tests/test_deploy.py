@@ -21,20 +21,42 @@ def the_job():
     return job
 
 
-def test_the_job_runs_daily_with_a_toolforge_macro():
-    # Toolforge asks for its macros, which spread jobs through the day.
+def the_jobs_args():
+    command = the_job()['command']
+    return _build_parser().parse_args(shlex.split(command.split('-m parambot', 1)[1]))
+
+
+def run_hours(field):
+    """The hours a cron hour field names, such as 1,7,13,19 or */6."""
+    if field.startswith('*/'):
+        return list(range(0, 24, int(field[2:])))
+    return sorted(int(hour) for hour in field.split(','))
+
+
+def test_the_job_runs_every_day_off_the_hour():
+    # Toolforge's macros jump from @hourly to @daily, so the job names its
+    # times, avoiding minute 0, when everyone else's jobs start.
     job = the_job()
     assert job['name'] == 'parambot'
-    assert job['schedule'] in {'@hourly', '@daily', '@weekly', '@monthly'}
+    minute, hours, *every_day = job['schedule'].split()
+    assert every_day == ['*', '*', '*']
+    assert 0 < int(minute) < 60
+    assert all(0 <= hour < 24 for hour in run_hours(hours))
     assert job['emails'] == 'onfailure'
 
 
+def test_a_run_ends_before_the_next_starts():
+    hours = run_hours(the_job()['schedule'].split()[1])
+    gap = min((later - hour) % 24 or 24
+              for hour, later in zip(hours, hours[1:] + hours[:1], strict=True))
+    max_hours = the_jobs_args().max_hours
+    # An hour spare, to finish the page in hand and save the report.
+    assert max_hours and max_hours <= gap - 1
+
+
 def test_the_jobs_command_is_one_the_bot_understands():
-    command = the_job()['command']
-    assert 'PYWIKIBOT_DIR=$HOME/parambot' in command
-    args = shlex.split(command.split('-m parambot', 1)[1])
-    parsed = _build_parser().parse_args(args)
-    assert parsed.command == 'run'
+    assert 'PYWIKIBOT_DIR=$HOME/parambot' in the_job()['command']
+    assert the_jobs_args().command == 'run'
 
 
 def test_the_jobs_python_is_one_ci_tests():

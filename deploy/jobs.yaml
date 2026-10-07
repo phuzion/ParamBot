@@ -2,12 +2,16 @@
 # Assumes the repo is checked out at ~/parambot with a venv at ~/parambot/venv,
 # and user-config.py / user-password.py (and parambot.toml, for any settings) in ~/parambot.
 - name: parambot
-  # Reporting only until the BRFA is approved: it saves User:ParamBot/Report and
-  # edits nothing else, and User:ParamBot/Run can say "report". Once approved,
-  # change --report-only to --live, and the Run page to "yes". (Or drop
-  # --report-only and set mode in parambot.toml: the command line wins over it.)
-  command: cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --report-only
+  # The BRFA trial: --live --trial edits without the bot flag, up to [trial]
+  # edits in parambot.toml, then only reports. After the trial, go back to
+  # --report-only, with User:ParamBot/Run saying "report", until the BRFA is
+  # approved; then use --live, with the Run page saying "yes". (Or drop the
+  # mode options and set mode in parambot.toml: the command line wins over it.)
+  command: cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --live --trial --max-hours 5
   image: python3.13
-  # Toolforge picks the time of day. Quoted: YAML can't start a bare value with @.
-  schedule: "@daily"
+  # Every six hours: 01:23, 07:23, 13:23 and 19:23 UTC. Toolforge's macros jump
+  # from @hourly to @daily, so the times are fixed here, off the hour, when
+  # everyone else's jobs start. --max-hours 5 above ends each run before the
+  # next starts: change the two together (tests/test_deploy.py checks them).
+  schedule: "23 1,7,13,19 * * *"
   emails: onfailure

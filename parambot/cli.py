@@ -111,7 +111,7 @@ def _build_parser() -> argparse.ArgumentParser:
                           '(default: [limits] max_edits in parambot.toml, else no limit; '
                           '0 = no limit)')
     run.add_argument('--max-hours', type=float,
-                     help='stop starting new work after this many hours, so a daily run '
+                     help='stop starting new work after this many hours, so a run '
                           'is done before the next starts (default: [limits] max_hours, '
                           'else 20; 0 = no limit)')
     run.add_argument('--cooldown-days', type=int,

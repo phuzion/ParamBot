@@ -9,12 +9,12 @@ names. Reverting an article to an older version, often to remove LLM-written
 text, can bring those names back. The infobox then silently drops that
 information, and the article lands in the template's *Pages using
 &lt;template&gt; with unknown parameters* category. ParamBot checks those
-categories daily and renames the old parameters to the new ones. It never
-reverts anyone's edit and changes nothing else.
+categories four times a day and renames the old parameters to the new ones.
+It never reverts anyone's edit and changes nothing else.
 
 **Status:** waiting for approval at
 [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot).
-Until then it runs daily in report-only mode and edits no articles. See
+Until then it runs in report-only mode and edits no articles. See
 [Status](#status).
 
 ## What it does to a page
@@ -143,9 +143,9 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   stops before doing anything if it's missing, rather than count from 0. It stops at the limit, carries on
   reporting only after that, and shows the count on the report. During a
   trial, every edit summary starts with "BRFA trial", linked to the request.
-- **Runs end within a day.** A run stops starting new work after 20 hours
-  (`max_hours`), so a daily run is done before the next one starts. What's
-  left is picked up the next day.
+- **Runs don't overlap.** The Toolforge job runs every six hours, and stops
+  starting new work after five (`--max-hours 5`), so each run is done before
+  the next one starts. What's left is picked up by the next run.
 - **Gentle on the API.** Every read waits at least a second after the last
   one (`read_delay`), so the bot can't make more than 3,600 an hour, and edits
   are at least 10 seconds apart (Pywikibot's `put_throttle`). Nothing is asked once per
@@ -387,7 +387,7 @@ wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 | `mode` | `"dry-run"` | What a plain `parambot run` does: `"dry-run"`, `"report-only"` or `"live"`. |
 | `[pages]` `rules`, `report`, `run`, `instructions`, `faq`, `header`, `link_rule` | `User:<bot>/Rules`, `/Report` and so on; `instructions` is the rules page's `/Instructions` | The bot's pages. The report page can't be one of the others. |
 | `[limits]` `cooldown_days` | `30` | Don't edit a page the bot edited this recently. `0` turns it off. |
-| `[limits]` `max_hours` | `20` | Stop starting new work after this many hours, so a daily run is done before the next starts. `0` means no limit. |
+| `[limits]` `max_hours` | `20` | Stop starting new work after this many hours, so a run is done before the next starts. The Toolforge job overrides it with `--max-hours 5`. `0` means no limit. |
 | `[limits]` `max_edits` | `0` | Stop after this many edits. `0` means no limit. |
 | `[limits]` `large_run` | `500` | A run with more edits than this gets a note on the report. `0` means never. |
 | `[limits]` `failures_in_a_row` | `5` | Stop the run when this many pages in a row fail. |
@@ -405,10 +405,11 @@ on (`yes`, `true`, `run`, `on`, and `report` for a report-only run).
 
 ## Deploying on Toolforge
 
-[`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot once a day with the
-[Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Running_jobs).
-It uses the `@daily` schedule, as the Toolforge documentation asks, so
-Toolforge chooses the time of day. Once it's set up,
+[`deploy/jobs.yaml`](deploy/jobs.yaml) runs the bot every six hours with the
+[Toolforge jobs framework](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Running_jobs),
+at 01:23, 07:23, 13:23 and 19:23 UTC. Toolforge's schedule macros jump from
+`@hourly` to `@daily`, so the job names its times, avoiding the top of the
+hour, when everyone else's jobs start. Once it's set up,
 [`docs/operators.md`](docs/operators.md) covers looking after it: logs,
 updates, stopping it, trials and common problems.
 
@@ -459,7 +460,7 @@ updates, stopping it, trials and common problems.
 6. Run `toolforge jobs load deploy/jobs.yaml`.
 
 Until the bot is approved, the job runs with `--report-only`, and
-`User:ParamBot/Run` says `report`: it updates the report every day and edits
+`User:ParamBot/Run` says `report`: it updates the report every run and edits
 no articles. For a BRFA trial, set `[trial] edits` in `parambot.toml` to the
 number approved, run the job with `--live --trial`, and set the Run page to
 `yes`: see [the operators' guide](docs/operators.md#a-brfa-trial). Once
@@ -513,7 +514,7 @@ the templates (`prepare`), then applies the active ones to each article
   [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot),
   was filed on 1 October 2026 and is open. The bot has no bot flag yet, and
   its user page says `status=unapproved`.
-- **Running.** The bot runs once a day on Toolforge in report-only mode:
+- **Running.** The bot runs four times a day on Toolforge in report-only mode:
   `User:ParamBot/Run` says `report`, and the job runs with `--report-only`.
   It updates `User:ParamBot/Report` with the edits it would make, and edits
   nothing else.
@@ -525,7 +526,8 @@ Decided:
 
 - **Rules pages.** They stay in the bot's userspace, under
   `User:ParamBot/Rules`, with the list template-editor protected.
-- **Timing.** The bot runs once a day, or more often if editors ask for it.
+- **Timing.** The bot runs every six hours. It ran once a day until 6 October
+  2026.
 - **Scope.** Renames and `remove` rules are in.
 
 Still open:

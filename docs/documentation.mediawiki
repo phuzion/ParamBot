@@ -24,7 +24,7 @@
 | Articles (main namespace) only
 |-
 ! How often
-| Once a day
+| Four times a day
 |-
 ! How much
 | At least 10 seconds apart. A run with more than 500 edits is noted on the report
@@ -124,7 +124,7 @@ The ''rules'' link in every summary goes to the exact version of the rules that 
 It keeps the article's formatting, including lined-up <code>=</code> signs, and ignores anything inside comments, <code><nowiki><nowiki></nowiki></code>, <code><nowiki><pre></nowiki></code> and <code><nowiki><syntaxhighlight></nowiki></code>.
 
 == How a run works ==
-Once a day, ParamBot:
+Four times a day, ParamBot:
 # '''Checks it's allowed to run.''' [[User:ParamBot/Run]] must say <code>yes</code>, and the bot must be logged in to its own account, with the bot flag except during a trial approved at [[WP:BRFA|Bots/Requests for approval]]. Until it's approved, it runs ''reporting only'': it works out every fix, but saves nothing except [[User:ParamBot/Report]], as the bot policy allows a bot to edit its own userspace without approval. [[User:ParamBot/Run]] can then say <code>report</code>.
 # '''Checks its own pages.''' [[User:ParamBot]] must name its operators with {{tl|bot}}, [[User:ParamBot/Rules]] must be template-editor protected, and the report page must exist and be editable. If anything is wrong, it doesn't run at all.
 # '''Reads the rules.''' It reads the approved revision of every rules page listed on [[User:ParamBot/Rules]] ([[#The rules|see below]]).
@@ -133,7 +133,7 @@ Once a day, ParamBot:
 # '''Fixes each article''' in the categories that have pages. Before each edit, it checks [[User:ParamBot/Run]] again.
 # '''Writes the report''' to [[User:ParamBot/Report]].
 
-It stops early if [[User:ParamBot/Run]] stops saying <code>yes</code>, if five articles in a row fail with errors, or as soon as an edit fails in a way that every other edit would too, such as when the bot is blocked. There's no limit on how many edits a run makes, but a run with more than 500 gets a note on the report, so that a rule catching more than it should is noticed. A run stops after 20 hours, so it's always finished before the next day's run starts; whatever is left is done then. During a trial approved at [[WP:BRFA|Bots/Requests for approval]], it counts its edits across runs, stops at the number approved, and shows the count on [[User:ParamBot/Report]]. Each trial edit's summary starts with "BRFA trial", linked to the request.
+It stops early if [[User:ParamBot/Run]] stops saying <code>yes</code>, if five articles in a row fail with errors, or as soon as an edit fails in a way that every other edit would too, such as when the bot is blocked. There's no limit on how many edits a run makes, but a run with more than 500 gets a note on the report, so that a rule catching more than it should is noticed. A run stops after 5 hours, so it's always finished before the next run starts, 6 hours later; whatever is left is done then. During a trial approved at [[WP:BRFA|Bots/Requests for approval]], it counts its edits across runs, stops at the number approved, and shows the count on [[User:ParamBot/Report]]. Each trial edit's summary starts with "BRFA trial", linked to the request.
 
 == The rules ==
 The bot only knows what the rules tell it. [[User:ParamBot/Rules/Instructions]] explains, step by step, how to write them; this is an overview.
@@ -265,7 +265,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 |}
 
 == Technical details ==
-* Written in Python, using [[mw:Manual:Pywikibot|Pywikibot]] to talk to the wiki and [https://github.com/earwig/mwparserfromhell mwparserfromhell] to read wikitext. It runs once a day on [[wikitech:Help:Toolforge|Toolforge]].
+* Written in Python, using [[mw:Manual:Pywikibot|Pywikibot]] to talk to the wiki and [https://github.com/earwig/mwparserfromhell mwparserfromhell] to read wikitext. It runs every six hours on [[wikitech:Help:Toolforge|Toolforge]].
 * Edits are marked as bot edits, at least 10 seconds apart, with <code>maxlag=5</code>, so it backs off when the servers are busy. It waits at least a second between reads, and reads pages, redirects, revisions and categories in batches of 50. The 30-day cooldown comes from one look at the bot's own recent edits, not from each article's history.
 * It identifies itself in its user agent with a link to [[User:ParamBot]].
 * Before a template's rules are used, it reads the template's own <code>Check for unknown parameters</code> call, including patterns such as <code>regexp1</code> and the extra map parameters added by <code>mapframe_args</code> and <code>pushpin_map_args</code>. To work out which category a template uses, it expands the call's <code>unknown=</code> text as MediaWiki would in an article.

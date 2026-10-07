@@ -137,7 +137,7 @@ def _clock_an_hour_a_read(monkeypatch):
 
 
 def test_a_run_stops_starting_new_work_after_max_hours(tmp_path, monkeypatch):
-    # So that a daily run can't still be going when the next one starts.
+    # So that a run can't still be going when the next one starts.
     _clock_an_hour_a_read(monkeypatch)
     opts = options(out_dir=str(tmp_path), max_hours=2.5)
     wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, *(article(f'P{i}') for i in range(5)))

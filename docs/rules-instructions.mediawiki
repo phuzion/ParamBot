@@ -10,7 +10,7 @@
 -->
 [[User:ParamBot|ParamBot]] reads the pages listed here to find out which template parameters to fix.
 
-When a template stops accepting an old parameter name (for example {{tl|Infobox settlement}} replacing {{para|imagesize}} with {{para|image_size}}), a revert can put the old name back into an article. The infobox then silently drops that information and the article shows up in the template's "unknown parameters" category. Once a day, ParamBot checks those categories and renames the old parameters to the new ones. It changes nothing else.
+When a template stops accepting an old parameter name (for example {{tl|Infobox settlement}} replacing {{para|imagesize}} with {{para|image_size}}), a revert can put the old name back into an article. The infobox then silently drops that information and the article shows up in the template's "unknown parameters" category. Four times a day, ParamBot checks those categories and renames the old parameters to the new ones. It changes nothing else.
 
 '''Only add renames that already have consensus.''' Usually that means the template's deprecated-parameter check listed them.
 
@@ -121,7 +121,7 @@ Check that:
 * any example tables you wrote in a discussion on a rules page are inside <code><nowiki><syntaxhighlight lang="wikitext"> ... </syntaxhighlight></nowiki></code>. '''If they aren't, the bot will obey them.'''
 
 == Checking your rules ==
-After the bot's next daily run, look at [[User:ParamBot/Report]].
+After the bot's next run (it runs every six hours), look at [[User:ParamBot/Report]].
 * '''Rules page problems''' lists anything the bot couldn't use and says how to fix it: for example a rules page listed without a revision, two rows that disagree, a rename to a name the template doesn't accept, or a table watching the wrong category. Fix those on the rules page it names, then approve the new revision.
 * '''Notes''' says which templates are inactive, and which rules pages have changed since their approved revision, with a link to the changes. A note saying the template "still accepts" an old name is normal: nothing is broken yet, so the rule waits. If you meant the row the other way round, swap its two names. A note saying a rule "isn't needed" means the old name is one of the map parameters, such as {{para|coord}}, that every template with <code>mapframe_args=y</code> or <code>pushpin_map_args=y</code> accepts: delete that row.
 * '''Needs human review''' lists articles where the old and the new parameter are both filled in with different values. The bot leaves those alone. Fix them by hand.

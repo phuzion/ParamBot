@@ -41,10 +41,13 @@ will fail with a conflict.
 The job is called `parambot`, and is defined in
 [`deploy/jobs.yaml`](../deploy/jobs.yaml):
 
-- **When:** `@daily`. Toolforge picks the time of day; `toolforge jobs show
-  parambot` shows when it last ran.
-- **What:** `python -m parambot run --report-only`, until the BRFA is
-  approved: it updates the report and edits no articles.
+- **When:** every six hours, at 01:23, 07:23, 13:23 and 19:23 UTC.
+  `toolforge jobs show parambot` shows when it last ran.
+- **What:** `python -m parambot run --live --trial --max-hours 5`, during
+  the BRFA trial: it edits until the trial's count is reached (see
+  [A BRFA trial](#a-brfa-trial)). Outside the trial, until the BRFA is
+  approved, `--report-only` instead: it updates the report and edits no
+  articles.
 - **Image:** `python3.13`. It must match the Python the venv was built with.
 - **Email:** Toolforge emails the tool's maintainers when a run fails.
 
@@ -64,8 +67,10 @@ Each run:
    commit, such as `<!-- ParamBot 3457b05 -->`. So the report's history is a
    log of the runs.
 
-A run stops starting new work after 20 hours (`max_hours`), so it can't
-still be going when the next one starts.
+A run stops starting new work after 5 hours (the job's `--max-hours 5`), so
+it can't still be going when the next one starts, 6 hours later. If you change
+the schedule, change that too: `tests/test_deploy.py` checks that they agree.
+The job's `--max-hours` overrides `max_hours` in `parambot.toml`.
 
 How a run ends:
 
@@ -76,7 +81,7 @@ How a run ends:
 | 2 | It refused to start, or was switched off: for example, the Run page says no, or the settings file has a mistake. |
 
 Anything but 0 gets a failure email. So while the Run page says `no`, expect
-an email every day.
+four emails a day, one per run.
 
 ## Getting in
 
@@ -179,7 +184,7 @@ setting. Every setting is listed, with its default, in
 
 - **From the wiki.** Anyone can do this. Change User:ParamBot/Run to `no`.
   The bot checks it at the start of every run and before every edit. Each
-  daily run then ends with exit code 2, and a failure email, until the page
+  run then ends with exit code 2, and a failure email, until the page
   is changed back.
 - **On Toolforge.** `toolforge jobs delete parambot` removes the job,
   including a run in progress. Bring it back with
@@ -188,7 +193,7 @@ setting. Every setting is listed, with its default, in
 ## A BRFA trial
 
 When the Bot Approvals Group approves a trial, of 100 edits say, let the
-daily job make them, a run at a time.
+scheduled job make them, a run at a time.
 
 1. Set the trial's size in `~/parambot/parambot.toml`:
 
@@ -226,7 +231,7 @@ the trial can't go over even if the job keeps running.
 
 ```bash
 cat trial-edits.txt                # the count so far
-toolforge jobs restart parambot    # start a run now, rather than waiting a day
+toolforge jobs restart parambot    # start a run now, rather than waiting for the next
 ```
 
 When the trial's done:

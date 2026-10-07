@@ -29,8 +29,9 @@ class Options:
     # a bot's own userspace without approval.
     report_only: bool = False
     max_edits: int | None = None    # stop after this many edits; 0 or None: no limit
-    # Stop starting new work after this many hours, so that a daily run
-    # can't still be going when the next one starts.  0 or None: no limit.
+    # Stop starting new work after this many hours, so that a run can't still
+    # be going when the next one starts.  20 suits a daily run; the Toolforge
+    # job runs every 6 hours and sets 5.  0 or None: no limit.
     max_hours: float | None = 20
     cooldown_days: int = 30         # don't edit a page the bot edited this recently
     large_run: int = 500            # more edits than this gets a note on the report; 0: never

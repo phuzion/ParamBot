@@ -39,8 +39,9 @@
 [limits]
 # Don't edit a page the bot edited this many days ago or less. 0 turns it off.
 # cooldown_days = 30
-# Stop starting new work after this many hours, so a daily run is done before
-# the next one starts. 0 means no limit.
+# Stop starting new work after this many hours, so a run is done before the
+# next one starts. 0 means no limit. The Toolforge job overrides this with
+# --max-hours 5, to suit its schedule.
 # max_hours = 20
 # Stop after this many edits, such as for a BRFA trial. 0 means no limit.
 # max_edits = 0

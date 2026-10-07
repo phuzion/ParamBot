@@ -29,7 +29,7 @@ If it's making bad edits, change [[User:ParamBot/Run]] to <code>no</code>. Anyon
 Each rename comes from a list on [[User:ParamBot/Rules]], usually taken from the template's own list of old parameter names. The list can only be changed by [[WP:TPE|template editors]]. The ''rules'' link in each edit summary shows the exact list the bot used.
 
 == Who runs it? ==
-[[User:Phuzion|Phuzion]] and [[User:Zackmann08|Zackmann08]]. It runs once a day and only edits articles.
+[[User:Phuzion|Phuzion]] and [[User:Zackmann08|Zackmann08]]. It runs four times a day and only edits articles.
 
 == Where can I find out more? ==
 [[User:ParamBot/Documentation]] explains everything the bot does, in detail.
