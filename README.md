@@ -12,10 +12,11 @@ information, and the article lands in the template's *Pages using
 categories four times a day and renames the old parameters to the new ones.
 It never reverts anyone's edit and changes nothing else.
 
-**Status:** waiting for approval at
+**Status:** in a 100-edit trial at
 [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot).
-Until then it runs in report-only mode and edits no articles. See
-[Status](#status).
+Until the trial's done it edits articles, with "BRFA trial" at the start of
+each edit summary. After that it runs in report-only mode, editing no
+articles, until the bot is approved. See [Status](#status).
 
 ## What it does to a page
 
@@ -512,12 +513,16 @@ the templates (`prepare`), then applies the active ones to each article
 
 - **Approval.** The bot approval request,
   [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot),
-  was filed on 1 October 2026 and is open. The bot has no bot flag yet, and
-  its user page says `status=unapproved`.
-- **Running.** The bot runs four times a day on Toolforge in report-only mode:
-  `User:ParamBot/Run` says `report`, and the job runs with `--report-only`.
-  It updates `User:ParamBot/Report` with the edits it would make, and edits
-  nothing else.
+  was filed on 1 October 2026. A trial of 100 edits was approved on 4 October
+  and started on 5 October. Its edits and any problems are logged at
+  [User:ParamBot/BRFA Log](https://en.wikipedia.org/wiki/User:ParamBot/BRFA_Log).
+  The bot has no bot flag yet, and its user page says `status=unapproved`.
+- **Running.** The bot runs four times a day on Toolforge, with
+  `--live --trial`, and `User:ParamBot/Run` says `yes`. Each run edits
+  articles until the trial's count reaches 100, then only reports. After the
+  trial, the job goes back to `--report-only` and the Run page to `report`
+  until the bot is approved (see
+  [the operators' guide](docs/operators.md#a-brfa-trial)).
 - **On the wiki.** The bot's pages are set up: `User:ParamBot/Rules` is
   template-editor protected and lists the approved rules pages, and the
   documentation, FAQ, instructions and talk page are in place.
