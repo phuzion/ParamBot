@@ -43,6 +43,8 @@ class FakeRevision:
 class FakePage:
     """A page on the fake wiki: the parts of a Pywikibot Page the bot uses."""
 
+    last_revid = 5_000_000   # the wiki's newest revision: each save makes another
+
     def __init__(self, title, text='', *, exists=True, redirect_to=None, model='wikitext',
                  templates=(), protection=None, editable=True, may_edit=True,
                  revisions=(), redirects=(), broken=False, save_error=None, on_save=None,
@@ -100,11 +102,14 @@ class FakePage:
     def save(self, *, summary, minor, bot, quiet, nocreate=False):
         if self._save_error:
             raise self._save_error
-        if self._deleted_before_save and nocreate:
+        if nocreate and (self._deleted_before_save or not self._exists):
             raise pwb_exc.NoCreateError(0)   # MediaWiki's "missingtitle"
         self.text = self.text.rstrip()   # as MediaWiki saves it
         self.saved.append(self.text)
         self.summaries.append(summary)
+        # Like Pywikibot, which sets it from the wiki's answer.
+        FakePage.last_revid += 1
+        self.latest_revision_id = FakePage.last_revid
         if self._on_save:
             self._on_save()
 
@@ -253,6 +258,8 @@ def bot_pages(options, **changes):
         options.instructions_page: FakePage(options.instructions_page, 'Instructions.'),
         options.faq_page: FakePage(options.faq_page, 'Questions and answers.'),
         options.header_page: FakePage(options.header_page, "Links to the bot's pages."),
+        options.trial_log_page: FakePage(options.trial_log_page,
+                                         '== BRFA Trial Log ==\n# [[Special:Diff/1]]\n'),
         'Template:Infobox officeholder': FakePage('Template:Infobox officeholder',
                                                   OFFICEHOLDER_SOURCE),
     }

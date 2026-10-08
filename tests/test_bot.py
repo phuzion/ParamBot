@@ -31,6 +31,7 @@ from parambot.bot import (
     StopRun,
     edit_summary,
     read_trial_count,
+    trial_log_line,
     write_trial_count,
 )
 from parambot.fixer import TemplateRules, fix_wikitext
@@ -508,6 +509,120 @@ def test_a_trial_counts_its_edits_across_runs_and_then_only_reports(tmp_path):
     assert 'would have made (reporting only) 2 edits.' in saved
     assert "The trial's 3 edits have all been made, so this run only reported." in saved
     assert 'BRFA trial: 3 of 3 edits made.' in saved
+
+
+def log_lines(page):
+    return [line for line in page.text.splitlines() if line.startswith('# ')]
+
+
+def test_a_trial_logs_its_edits_on_the_log_page(tmp_path, monkeypatch):
+    monkeypatch.setattr('parambot.bot._now', lambda: datetime(2026, 10, 7, 19, 24, tzinfo=UTC))
+    opts = trial(tmp_path)
+    jane, kech = article('Jane Example'), article('Battle Of Kech')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane, kech)
+    ParamBot(wiki, opts).run()
+    log_page = wiki.page(opts.trial_log_page)
+    # One edit a run, added to the end of what's there.
+    assert log_page.summaries == ['Logging 2 BRFA trial edits (2 of 3 made)']
+    lines = [f'# [[Special:Diff/{page.latest_revision_id}]] ([[:{page.title()}]], '
+             '7 October 2026, 19:24 UTC)' for page in (jane, kech)]
+    assert log_page.text == '== BRFA Trial Log ==\n# [[Special:Diff/1]]\n' + '\n'.join(lines)
+    # A copy, in case the page can't be saved.
+    copy = (tmp_path / 'out' / 'trial-log.mediawiki').read_text(encoding='utf-8')
+    assert copy == '\n'.join(lines) + '\n'
+
+    # The next run adds to both.
+    wiki.populate(OFFICEHOLDER_CATEGORY, article('Third'))
+    ParamBot(wiki, opts).run()
+    assert len(log_lines(log_page)) == 4
+    assert log_page.summaries[-1] == 'Logging 1 BRFA trial edit (3 of 3 made)'
+    assert len((tmp_path / 'out' / 'trial-log.mediawiki').read_text().splitlines()) == 3
+
+
+def test_a_trial_with_no_edits_leaves_the_log_alone(tmp_path):
+    opts = trial(tmp_path)
+    wiki = wiki_for(opts)
+    ParamBot(wiki, opts).run()
+    assert wiki.page(opts.trial_log_page).saved == []
+
+
+def test_only_a_trial_is_logged(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    assert ParamBot(wiki, opts).run().edits == 1
+    assert wiki.page(opts.trial_log_page).saved == []
+    assert not (tmp_path / 'trial-log.mediawiki').exists()
+
+
+def test_a_log_that_cannot_be_saved_is_noted_and_the_copy_kept(tmp_path):
+    opts = trial(tmp_path)
+    wiki = wiki_for(opts, **{opts.trial_log_page: None})   # the page doesn't exist
+    wiki.populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    report = ParamBot(wiki, opts).run()
+    assert report.edits == 1 and report.errors == []
+    copy = tmp_path / 'out' / 'trial-log.mediawiki'
+    assert plain(report.notes[-2]).startswith(
+        f"This run's 1 trial edit couldn't be added to {opts.trial_log_page}: ")
+    assert plain(report.notes[-2]).endswith(
+        f"They're also in {copy} on the bot's machine, ready to paste.")
+    assert '[[:Jane Example]]' in copy.read_text(encoding='utf-8')
+
+
+def test_a_local_copy_that_cannot_be_written_doesnt_stop_the_trial(tmp_path, caplog):
+    (tmp_path / 'not a directory').write_text('', encoding='utf-8')
+    opts = trial(tmp_path, out_dir=str(tmp_path / 'not a directory'))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    assert ParamBot(wiki, opts).run().edits == 1
+    assert '[[:Jane Example]]' in wiki.page(opts.trial_log_page).text
+    assert any(m.startswith('Could not add Jane Example to ') for m in caplog.messages)
+
+
+def test_a_trial_switched_off_mid_run_keeps_its_log_locally(tmp_path, caplog):
+    # Switched off, the bot makes no more wiki edits, the log included.
+    opts = trial(tmp_path)
+
+    def switch_off():
+        wiki.page(opts.run_page).text = 'no'
+    first, second = article('First', on_save=switch_off), article('Second')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, first, second)
+    with pytest.raises(StopRun):
+        ParamBot(wiki, opts).run()
+    assert wiki.page(opts.trial_log_page).saved == []
+    copy = tmp_path / 'out' / 'trial-log.mediawiki'
+    assert '[[:First]]' in copy.read_text(encoding='utf-8')
+    assert any(f"couldn't be added to {opts.trial_log_page}" in m for m in caplog.messages)
+
+
+def test_a_trial_stopped_by_an_error_still_logs_its_edits(tmp_path):
+    opts = trial(tmp_path)
+    blocked = pwb_exc.OtherPageSaveError(0, pwb_exc.APIError('blocked', 'Blocked'))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Made'),
+                                   article('Refused', save_error=blocked))
+    with pytest.raises(CannotEdit):
+        ParamBot(wiki, opts).run()
+    [added] = log_lines(wiki.page(opts.trial_log_page))[1:]   # after the line already there
+    assert '[[:Made]]' in added
+
+
+@pytest.mark.parametrize('log', [
+    'User:Someone else/BRFA Log',          # not the bot's own page
+    'Wikipedia:Bots/Requests for approval/ExampleBot',
+    'User:ExampleBot/Run',                 # one of its other pages
+    'User:ExampleBot/Report',
+    'User:ExampleBot/Rules/Infobox foo',   # a rules page
+])
+def test_a_trial_log_anywhere_else_stops_a_trial_before_it_starts(tmp_path, log):
+    opts = trial(tmp_path, trial_log_page=log)
+    jane = article('Jane Example')
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, jane)
+    with pytest.raises(StopRun, match="the BRFA trial's log, must be a page of its own"):
+        ParamBot(wiki, opts).run()
+    assert jane.saved == []
+
+
+def test_a_log_line_without_a_revision_still_names_the_article():
+    assert trial_log_line(None, 'Jane Example', datetime(2026, 10, 7, 1, 5, tzinfo=UTC)) == (
+        '# ([[:Jane Example]], 7 October 2026, 01:05 UTC)')
 
 
 def test_max_edits_still_limits_a_run_in_a_trial(tmp_path):

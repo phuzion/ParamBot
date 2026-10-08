@@ -141,9 +141,11 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
 - **Trials stop at the number approved.** With `[trial] edits` set, the bot
   counts its article edits across runs, in a file next to `user-config.py`
   that it updates after every edit. Every run logs where that file is, and
-  stops before doing anything if it's missing, rather than count from 0. It stops at the limit, carries on
-  reporting only after that, and shows the count on the report. During a
-  trial, every edit summary starts with "BRFA trial", linked to the request.
+  stops before doing anything if it's missing, rather than count from 0. It
+  stops at the limit, carries on reporting only after that, and shows the
+  count on the report. During a trial, every edit summary starts with "BRFA
+  trial", linked to the request, and each run adds its edits to
+  `User:ParamBot/BRFA Log`, naming each article as well as linking the diff.
 - **Runs don't overlap.** The Toolforge job runs every six hours, and stops
   starting new work after five (`--max-hours 5`), so each run is done before
   the next one starts. What's left is picked up by the next run.
@@ -395,6 +397,7 @@ wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 | `[limits]` `read_delay` | `1` | Seconds between API reads, at least. |
 | `[trial]` `edits` | `0` | A BRFA trial: across all runs, edit at most this many articles, then report only. `0` means no trial. |
 | `[trial]` `brfa` | `Wikipedia:Bots/Requests for approval/<bot>` | The bot approval request. During a trial (`--trial`, or `edits` set), every edit summary starts with "BRFA trial", linked to it. |
+| `[trial]` `log` | `User:<bot>/BRFA Log` | During a trial, each run adds its edits to the end of this page, in one edit, with a copy in `[output] dir`/`trial-log.mediawiki`. It must be one of the bot's own pages, and exist. |
 | `[trial]` `count_file` | `"trial-edits.txt"` | Where the trial's count is kept, next to `user-config.py` unless the path says otherwise. Create it, holding `0`, to start a trial: while `edits` is set, the bot won't run without it. Set it back to `0` to count afresh. |
 | `[rules]` `protection` | `"templateeditor"` | The protection the rules page needs before a live run will start: `"autoconfirmed"`, `"extendedconfirmed"`, `"templateeditor"` or `"sysop"`, or anything stronger. |
 | `[output]` `dir` | `"out"` | Where dry runs, and runs that can't save the report, write their files. |

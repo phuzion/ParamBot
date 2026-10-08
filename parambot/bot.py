@@ -69,6 +69,7 @@ class ParamBot:
         self._recent_edits: dict[str, datetime] | None = None   # {title: when the bot edited it}
         self._started = _clock()
         self._trial_made: int | None = None   # edits made in a BRFA trial, if there is one
+        self._trial_log: list[str] = []       # this run's trial edits, for the trial's log
 
     # -- a run -------------------------------------------------------------
 
@@ -81,20 +82,26 @@ class ParamBot:
             self._run()
         except StopRun as stop:
             # Someone switched the bot off, or it can't start: make no more
-            # wiki edits, not even the report.
+            # wiki edits, not even the report or the trial's log.
             self.report.errors.append(msg.stopped_early(stop))
+            if self._trial_log:
+                log.warning('%s', msg.plain(msg.trial_log_not_saved(
+                    self.options.trial_log_page, len(self._trial_log), self._trial_log_file)))
             self._write_report(local_only=True)
             raise
         except CannotEdit as stop:
             log.error('%s', msg.plain(str(stop)))
             self.report.errors.append(str(stop))
+            self._write_trial_log()
             self._write_report()
             raise
         except Exception as error:
             log.exception('Run failed')
             self.report.errors.append(msg.run_failed(error))
+            self._write_trial_log()
             self._write_report()
             raise
+        self._write_trial_log()
         self._write_report()
         return self.report
 
@@ -149,6 +156,58 @@ class ParamBot:
             raise StopRun(msg.trial_count_unsaved(self.options.trial_count_file, error)) \
                 from error
 
+    def _log_trial_edit(self, page: WikiPage, title: str) -> None:
+        """Note a trial edit for the trial's log, and add it to the local copy
+        at once, in case the run is stopped before the log is saved."""
+        if not self.options.in_trial:
+            return
+        line = trial_log_line(page.latest_revision_id, title, _now())
+        self._trial_log.append(line)
+        try:
+            os.makedirs(self.options.out_dir, exist_ok=True)
+            with open(self._trial_log_file, 'a', encoding='utf-8', newline='\n') as f:
+                f.write(line + '\n')
+        except OSError as error:
+            log.warning('Could not add %s to %s: %s', title, self._trial_log_file, error)
+
+    @property
+    def _trial_log_file(self) -> str:
+        """The local copy of every trial edit's line for the trial's log."""
+        return os.path.abspath(os.path.join(self.options.out_dir, 'trial-log.mediawiki'))
+
+    def _write_trial_log(self) -> None:
+        """Add this run's trial edits to the end of the trial's log page, in
+        one edit.  If that fails, the report says so; they're in the local
+        copy too."""
+        if not self._trial_log:
+            return
+        options = self.options
+        page = self.wiki.page(options.trial_log_page)
+        lines = len(self._trial_log)
+        try:
+            page.text = page.text.rstrip('\n') + '\n' + '\n'.join(self._trial_log)
+            page.save(summary=msg.trial_log_summary(lines, self._trial_made, options.trial_edits),
+                      minor=True, bot=self.wiki.has_right('bot'), quiet=True, nocreate=True)
+        except Exception as error:
+            log.exception('Could not save %s', options.trial_log_page)
+            self.report.notes.append(msg.trial_log_not_saved(
+                options.trial_log_page, lines, self._trial_log_file, error))
+        else:
+            log.info('Added %d trial edits to %s', lines, options.trial_log_page)
+
+    def _check_trial_log_page(self) -> None:
+        """The trial's log is saved without approval, so it must be the bot's
+        own page, and not one of its others, which it would add to."""
+        options = self.options
+        title = normalize_title(options.trial_log_page)
+        others = {normalize_title(t) for t in (
+            options.user_page, options.rules_page, options.run_page, options.report_page,
+            options.instructions_page, options.faq_page, options.header_page,
+            options.link_rule_page)}
+        if (not self._in_own_userspace(title) or title in others
+                or title.startswith(normalize_title(options.rules_page) + '/')):
+            raise StopRun(msg.trial_log_elsewhere(options.trial_log_page, options.user_page))
+
     def _preflight(self) -> None:
         options = self.options
         if options.report_only:
@@ -156,6 +215,8 @@ class ParamBot:
         elif options.live and options.any_namespace:
             # Articles only, as the bot request asked; other pages are for previews.
             raise StopRun(msg.ANY_NAMESPACE_LIVE)
+        if options.edits_articles and options.in_trial:
+            self._check_trial_log_page()
         if options.saves_report:
             self._check_report_page()
             self._check_account()
@@ -442,6 +503,8 @@ class ParamBot:
         else:
             self.report.edits += 1
             log.info('Saved %s', title)
+            # Logged first: if the count can't be saved, the run stops.
+            self._log_trial_edit(page, title)
             self._count_trial_edit()
 
     def _skip(self, title: str, reason: str) -> None:
@@ -516,6 +579,14 @@ class ParamBot:
         page.save(summary=msg.report_summary(self.report.edits, len(self.report.issues),
                                              self.options.report_only),
                   minor=True, bot=self.wiki.has_right('bot'), quiet=True, nocreate=True)
+
+
+def trial_log_line(revid: int | None, title: str, when: datetime) -> str:
+    """A trial edit's line in the trial's log: a numbered item with the diff,
+    and the article's title at the time, which says which it was even once
+    the article is deleted or moved."""
+    diff = f'[[Special:Diff/{revid}]] ' if revid else ''
+    return f'# {diff}([[:{title}]], {when.day} {when:%B %Y}, {when:%H:%M} UTC)'
 
 
 def edit_summary(result: FixResult, rules_page: str, faq_page: str,

@@ -558,6 +558,25 @@ def trial_done(limit: int) -> str:
             f'Once the trial is over, take {code("[trial] edits")} out of the settings.')
 
 
+def trial_log_summary(edits: int, made: int | None, limit: int) -> str:
+    """The summary for adding a run's trial edits to the trial's log."""
+    progress = f' ({made} of {limit} made)' if made is not None and limit else ''
+    return f'Logging {count(edits, "BRFA trial edit")}{progress}'
+
+
+def trial_log_not_saved(page: str, edits: int, path: str, error: object = None) -> str:
+    """A run's trial edits that didn't reach the trial's log page."""
+    why = f': {quoted(error)}' if error is not None else ''
+    return (f"This run's {count(edits, 'trial edit')} couldn't be added to {page}{why}. "
+            f"They're also in {code(path)} on the bot's machine, ready to paste.")
+
+
+def trial_log_elsewhere(page: str, user_page: str) -> str:
+    return (f"{page}, the BRFA trial's log, must be a page of its own in {user_page}'s "
+            'userspace, since the bot edits it without approval. Change '
+            f'{code("[trial] log")} in the settings.')
+
+
 def stopped_at_trial_limit(limit: int) -> str:
     return (f"Stopped: that was the last of the trial's {count(limit, 'edit')}. From now on, "
             'runs only report.')

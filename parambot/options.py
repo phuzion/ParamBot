@@ -47,6 +47,10 @@ class Options:
     # The bot approval request, which a trial edit's summary links to.
     # Default: Wikipedia:Bots/Requests for approval/<bot_user>.
     brfa_page: str = ''
+    # During a trial, each run adds its edits to the end of this page, a
+    # numbered list for the BRFA.  It must be in the bot's own userspace and
+    # already exist.  Default: User:<bot_user>/BRFA Log.
+    trial_log_page: str = ''
     namespaces: tuple[int, ...] = (0,)
     templates: tuple[str, ...] = ()  # only these templates' rules
     pages: tuple[str, ...] = ()      # only these pages, instead of polling categories
@@ -64,6 +68,7 @@ class Options:
         self.link_rule_page = self.link_rule_page or f'{base}/LinkRule'
         self.brfa_page = (self.brfa_page
                           or f'Wikipedia:Bots/Requests for approval/{self.bot_user}')
+        self.trial_log_page = self.trial_log_page or f'{base}/BRFA Log'
         if self.rules_protection not in PROTECTION_LEVELS:
             raise ValueError(f'rules_protection must be one of {", ".join(PROTECTION_LEVELS)}, '
                              f'not {self.rules_protection!r}')
@@ -98,6 +103,7 @@ class Options:
             self.faq_page: 'the FAQ',
             self.header_page: 'the header',
             self.link_rule_page: 'the LinkRule template',
+            self.trial_log_page: "the BRFA trial's log",
         }
 
     @property

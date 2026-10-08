@@ -229,15 +229,38 @@ tell the trial's edits apart.
 The run that makes the last edit stops there, and later runs only report, so
 the trial can't go over even if the job keeps running.
 
+At the end of each run, the bot adds that run's edits to the end of
+[User:ParamBot/BRFA Log](https://en.wikipedia.org/wiki/User:ParamBot/BRFA_Log),
+in one edit (`[trial] log` in the settings). Each is a numbered line, so the
+list carries on from the edits already there:
+
+```
+# [[Special:Diff/1379069507]] ([[:Battle of the Wichita Village]], 7 October 2026, 19:24 UTC)
+```
+
+The article's title is the one it had at the time, so the line still says
+which article it was after the article is deleted, when the diff stops
+working for anyone but admins, or moved to Draft. Notes, such as "deleted
+after the bot's edit", are yours to add. The page must exist: the bot won't
+create it.
+
+Every line also goes straight into `~/parambot/out/trial-log.mediawiki`. If
+the bot can't save the log page, the report says so, and the lines are in
+that file to paste. That includes a run switched off part-way, which makes
+no more wiki edits, the log included.
+
 ```bash
 cat trial-edits.txt                # the count so far
+cat out/trial-log.mediawiki        # every logged trial edit
 toolforge jobs restart parambot    # start a run now, rather than waiting for the next
 ```
 
 When the trial's done:
 
-4. Link the trial edits on the BRFA:
-   [ParamBot's article edits](https://en.wikipedia.org/w/index.php?title=Special:Contributions/ParamBot&namespace=0&limit=500).
+4. Link the trial edits on the BRFA: User:ParamBot/BRFA Log lists them all,
+   including any to articles deleted since, which
+   [ParamBot's article edits](https://en.wikipedia.org/w/index.php?title=Special:Contributions/ParamBot&namespace=0&limit=500)
+   leave out.
 5. Put the job back to `--report-only`, the same way as step 2, set the Run
    page back to `report`, and take `[trial]` out of `parambot.toml`.
 

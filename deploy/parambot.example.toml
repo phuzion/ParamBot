@@ -73,6 +73,12 @@
 # edit summary starts with "BRFA trial", linked to it. The default is
 # Wikipedia:Bots/Requests for approval/<bot>.
 # brfa = "Wikipedia:Bots/Requests for approval/ParamBot"
+# During a trial, each run adds its edits to the end of this page, in one
+# edit: a numbered line each, with the diff, the article and the time. It
+# must be in the bot's own userspace, and exist already. Every line also goes
+# in trial-log.mediawiki in [output] dir, in case the page can't be saved.
+# The default is User:<bot>/BRFA Log.
+# log = "User:ParamBot/BRFA Log"
 
 [output]
 # Where dry runs, and runs that can't save the report, write their files.
