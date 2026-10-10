@@ -212,8 +212,9 @@ def test_rules_that_wait_and_rules_that_cannot_work():
 
 
 def test_rules_for_map_parameters_the_check_adds_are_not_needed():
-    # Like Infobox monastery: mapframe_args=y makes the check accept coord,
-    # though nothing in the template's own code mentions it.
+    # mapframe_args=y makes the check accept id, though nothing in the
+    # template's own code mentions it.  Not coord, which the module dropped
+    # from its list: that rule is needed.
     source = OFFICEHOLDER_SOURCE.replace('| name |', '| mapframe_args = y | name |')
     wiki = FakeWiki(FakePage(OFFICEHOLDER, source))
     _, report = run_prepare(wiki, officeholder(
@@ -229,8 +230,8 @@ def test_rules_for_map_parameters_the_check_adds_are_not_needed():
 
 
 def test_one_rule_that_is_not_needed():
-    assert plain(msg.rules_not_needed('Infobox monastery', ['coord'], 'mapframe_args')) == (
-        "Infobox monastery: 1 rule isn't needed, because \"coord\" is one of the map parameters "
+    assert plain(msg.rules_not_needed('Infobox monastery', ['qid'], 'mapframe_args')) == (
+        "Infobox monastery: 1 rule isn't needed, because \"qid\" is one of the map parameters "
         'that Module:Check for unknown parameters accepts for any template with '
         'mapframe_args=y. Delete the rule unless the template stops using mapframe_args.')
 

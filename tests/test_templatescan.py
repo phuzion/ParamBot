@@ -69,14 +69,15 @@ def test_why_a_name_is_accepted():
     assert known.added_by('custom_label3_sec2') is None     # its own pattern
     assert known.added_by('nonsense') is None               # not accepted at all
     # Listed by the template itself as well: its own list wins.
-    listed = known_params('{{#invoke:Check for unknown parameters|check|mapframe_args=y| coord }}')
-    assert listed.added_by('coord') is None
+    listed = known_params(
+        '{{#invoke:Check for unknown parameters|check|mapframe_args=y| coordinates }}')
+    assert listed.added_by('coordinates') is None
 
 
 def test_why_a_wrapper_accepts_a_name():
-    inner = KnownParams({'birth_name'}, extras={'coord': 'mapframe_args'})
+    inner = KnownParams({'birth_name'}, extras={'coordinates': 'mapframe_args'})
     known = WrappedParams(wrapper_call(WRAPPER), inner)
-    assert known.added_by('coord') == 'mapframe_args'     # passed on to the map settings
+    assert known.added_by('coordinates') == 'mapframe_args'  # passed on to the map settings
     assert known.added_by('service_years') is None        # the wrapper uses it itself
     assert known.added_by('birth_name') is None
 
