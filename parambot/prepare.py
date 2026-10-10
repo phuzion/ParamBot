@@ -20,11 +20,13 @@ from .fixer import TemplateRules
 from .report import Report
 from .rules import RuleSet
 from .templatescan import (
+    UNKNOWN_CHECK_MODULE,
     KnownParams,
     WrappedParams,
     Wrapper,
     categories_in,
     known_params,
+    map_params,
     wrapper_call,
 )
 from .wiki import Wiki, WikiPage
@@ -65,7 +67,8 @@ def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared
                  if (template := _template_for(ruleset, loaded.get(page.title(), page), report,
                                                prepared)) is not None]
     found: list[_Found] = []
-    params = template_params(wiki, [template for _, template in templates])
+    params = template_params(wiki, [template for _, template in templates],
+                             module_map_params(wiki) if templates else None)
     for (ruleset, template), (known, passed_to) in zip(templates, params, strict=True):
         if known is None:
             # Without the list, a backwards rule (image_size → imagesize) would
@@ -74,6 +77,10 @@ def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared
             continue
         if known.unsure:
             report.problems.append(msg.kept_only_sometimes(ruleset.template, sorted(known.unsure)))
+            continue
+        if known.unread_settings:
+            report.problems.append(msg.map_params_unread(ruleset.template,
+                                                         sorted(known.unread_settings)))
             continue
         names = {ruleset.template}
         if ruleset.template in prepared.redirected:
@@ -134,10 +141,29 @@ def _check(found: _Found, categories: list[str] | None, report: Report,
     return TemplateRules(ruleset, frozenset(found.names), known)
 
 
-def template_params(wiki: Wiki, pages: list[WikiPage]
+def module_map_params(wiki: Wiki) -> dict[str, frozenset[str]] | None:
+    """The map parameters Module:Check for unknown parameters accepts for
+    mapframe_args and pushpin_map_args, read from the module itself, or None
+    if the bot can't read them: then templates using those settings have
+    their rules switched off."""
+    page = wiki.page(UNKNOWN_CHECK_MODULE)
+    try:
+        source = page.text if page.exists() else ''
+    except Exception as error:
+        log.warning('Could not read %s: %s', UNKNOWN_CHECK_MODULE, error)
+        return None
+    found = map_params(source)
+    if found is None:
+        log.warning("Could not find the map parameters' lists in %s", UNKNOWN_CHECK_MODULE)
+    return found
+
+
+def template_params(wiki: Wiki, pages: list[WikiPage],
+                    map_names: dict[str, frozenset[str]] | None = None
                     ) -> list[tuple[KnownParams | None, list[str]]]:
     """For each template, the parameters it accepts, or None if the bot
     can't tell, and the templates it passes them on to, if it's a wrapper.
+    map_names are the module's map parameters (see module_map_params).
 
     The templates that wrappers pass their parameters on to are loaded
     together, a level of wrapping at a time, each one once: dozens of
@@ -149,7 +175,7 @@ def template_params(wiki: Wiki, pages: list[WikiPage]
     while pending:
         follow: dict[int, str] = {}   # {index: the template its wrapper passes on to}
         for i in pending:
-            known[i] = known_params(current[i].text)
+            known[i] = known_params(current[i].text, map_names)
             if known[i] is not None:
                 continue
             wrapper = wrapper_call(current[i].text)

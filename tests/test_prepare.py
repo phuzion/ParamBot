@@ -1,7 +1,7 @@
 """Checking rule sets against the templates on the wiki."""
 
 import pytest
-from fakes import OFFICEHOLDER_SOURCE, FakePage, FakeWiki
+from fakes import OFFICEHOLDER_SOURCE, UNKNOWN_CHECK_SOURCE, FakePage, FakeWiki
 
 from parambot import messages as msg
 from parambot.fixer import fix_wikitext
@@ -9,10 +9,11 @@ from parambot.messages import plain
 from parambot.prepare import category_problem, prepare, template_categories
 from parambot.report import Report
 from parambot.rules import parse_config
-from parambot.templatescan import KnownParams
+from parambot.templatescan import UNKNOWN_CHECK_MODULE, KnownParams
 
 ANATOMY = 'Category:Anatomy infobox template using unknown parameters'
 OFFICEHOLDER = 'Template:Infobox officeholder'
+MODULE = FakePage(UNKNOWN_CHECK_MODULE, UNKNOWN_CHECK_SOURCE)
 
 
 def table(template, *pairs, caption_extra=''):
@@ -216,7 +217,7 @@ def test_rules_for_map_parameters_the_check_adds_are_not_needed():
     # template's own code mentions it.  Not coord, which the module dropped
     # from its list: that rule is needed.
     source = OFFICEHOLDER_SOURCE.replace('| name |', '| mapframe_args = y | name |')
-    wiki = FakeWiki(FakePage(OFFICEHOLDER, source))
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, source), MODULE)
     _, report = run_prepare(wiki, officeholder(
         ('coord', 'coordinates'), ('id', 'coordinates'), ('term_end', 'term_start')))
     assert [plain(note) for note in report.notes] == [
@@ -227,6 +228,62 @@ def test_rules_for_map_parameters_the_check_adds_are_not_needed():
         'parameters that Module:Check for unknown parameters accepts for any template with '
         'mapframe_args=y. Delete the rule unless the template stops using mapframe_args.']
     assert report.problems == []
+
+
+@pytest.mark.parametrize('module', [
+    FakePage(UNKNOWN_CHECK_MODULE, exists=False),
+    FakePage(UNKNOWN_CHECK_MODULE, 'return {}'),     # changed beyond recognition
+    FakePage(UNKNOWN_CHECK_MODULE, broken=True),     # couldn't be read
+])
+def test_without_the_modules_map_parameters_map_templates_are_switched_off(module, caplog):
+    # Without the module's list, the bot can't tell which names a template
+    # with mapframe_args=y accepts, so it mustn't guess, or use an old copy.
+    mapped = FakePage(OFFICEHOLDER, OFFICEHOLDER_SOURCE.replace(
+        '| name |', '| mapframe_args = y | name |'))
+    plain_template = FakePage('Template:Infobox person', PERSON_SOURCE)
+    wiki = FakeWiki(mapped, plain_template, module)
+    config = parse_config(table('Infobox officeholder', ('termstart', 'term_start'))
+                          + table('Infobox person', ('birthname', 'birth_name')))
+    prepared, report = run_prepare(wiki, *config.rulesets.values())
+    # Templates that don't use those settings carry on as usual.
+    assert [target.template for target in prepared.ready] == ['Infobox person']
+    assert [plain(p) for p in report.problems if 'map parameters' in p] == [
+        'Template:Infobox officeholder uses mapframe_args=y, which makes Module:Check for '
+        "unknown parameters accept a list of map parameters too, but the bot couldn't read "
+        "that list from the module, so it can't tell which parameters the template accepts, "
+        'and its rules are switched off. If the module has changed, tell the operators: the '
+        'bot may need updating.']
+    assert any(UNKNOWN_CHECK_MODULE in m for m in caplog.messages)
+
+
+def test_a_wrapper_of_a_map_template_is_switched_off_without_the_list():
+    wrapped = FakePage('Template:Infobox settlement',
+                       OFFICEHOLDER_SOURCE.replace('| name |', '| pushpin_map_args = y | name |'))
+    wrapper = FakePage('Template:Infobox town',
+                       '{{#invoke:Template wrapper|wrap|_template=Infobox settlement}}')
+    wiki = FakeWiki(wrapped, wrapper)   # no module
+    config = parse_config(table('Infobox town', ('termstart', 'term_start')))
+    prepared, report = run_prepare(wiki, *config.rulesets.values())
+    assert prepared.ready == []
+    assert 'Template:Infobox town uses pushpin_map_args=y' in plain(report.problems[0])
+
+
+def test_the_module_is_read_once_a_run_and_only_when_there_are_templates():
+    reads = []
+
+    class CountingWiki(FakeWiki):
+        def page(self, title, ns=0):
+            if title == UNKNOWN_CHECK_MODULE:
+                reads.append(title)
+            return super().page(title, ns)
+    many = [FakePage(f'Template:Infobox {i}', OFFICEHOLDER_SOURCE.replace(
+        '| name |', '| mapframe_args = y | name |')) for i in range(3)]
+    config = parse_config(''.join(table(f'Infobox {i}', ('a', 'name')) for i in range(3)))
+    run_prepare(CountingWiki(*many, MODULE), *config.rulesets.values())
+    assert reads == [UNKNOWN_CHECK_MODULE]
+    reads.clear()
+    run_prepare(CountingWiki(MODULE))
+    assert reads == []
 
 
 def test_one_rule_that_is_not_needed():

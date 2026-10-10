@@ -19,6 +19,7 @@ import pytest
 
 from parambot import commit
 from parambot.cli import _user_agent
+from parambot.prepare import module_map_params
 from parambot.settings import READ_DELAY
 from parambot.wiki import Wiki
 
@@ -48,6 +49,16 @@ def test_check_rules_runs_against_the_real_wiki(tmp_path):
     assert result.returncode in (0, 1), result.stderr
     assert 'INFO ParamBot' in result.stderr
     assert 'Traceback' not in result.stderr
+
+
+def test_the_modules_map_parameters_can_be_read(wiki):
+    # If this fails, Module:Check for unknown parameters has changed shape,
+    # and every run is switching off the rules of templates using
+    # mapframe_args or pushpin_map_args, until map_params is updated.
+    names = module_map_params(wiki)
+    assert names is not None
+    assert {'mapframe-zoom', 'coordinates'} <= names['mapframe_args']
+    assert {'pushpin_map', 'coordinates'} <= names['pushpin_map_args']
 
 
 def test_the_rules_pages_are_found(wiki):

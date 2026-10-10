@@ -315,6 +315,16 @@ def no_parameter_list(template: str, passed_to: Sequence[str] = ()) -> str:
             f'{check} call){wrapped}, so its rules are switched off.')
 
 
+def map_params_unread(template: str, settings: Sequence[str]) -> str:
+    """settings: such as mapframe_args, which the template's unknown-parameter
+    check uses, but whose map parameters the bot couldn't read from the module."""
+    used = _and([code(f'{setting}=y') for setting in settings])
+    return (f'Template:{template} uses {used}, which makes {UNKNOWN_CHECK} accept a list of '
+            "map parameters too, but the bot couldn't read that list from the module, so it "
+            "can't tell which parameters the template accepts, and its rules are switched off. "
+            'If the module has changed, tell the operators: the bot may need updating.')
+
+
 def kept_only_sometimes(template: str, names: Sequence[str]) -> str:
     """names: what the wrapper template keeps for itself on some pages, and
     passes on, to a template that doesn't accept them, on others."""

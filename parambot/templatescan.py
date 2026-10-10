@@ -27,36 +27,16 @@ from mwparserfromhell.wikicode import Wikicode
 from .luapattern import LuaPattern, LuaPatternError
 from .wikitext import normalize_category, normalize_template_name, param_name, strip_comments
 
-__all__ = ['KnownParams', 'WrappedParams', 'Wrapper', 'known_params', 'wrapper_call',
-           'categories_in', 'scaffold_table']
+__all__ = ['KnownParams', 'WrappedParams', 'Wrapper', 'known_params', 'map_params',
+           'wrapper_call', 'categories_in', 'scaffold_table']
 
-# Copied from Module:Check for unknown parameters, which adds these names
-# when the call has |mapframe_args=y or |pushpin_map_args=y.
-MAPFRAME_PARAMS = frozenset('''
-    coordinates id qid mapframe mapframe-area_km2 mapframe-area_mi2
-    mapframe-caption mapframe-coord mapframe-coordinates mapframe-custom
-    mapframe-frame-coord mapframe-frame-coordinates mapframe-frame-height
-    mapframe-frame-width mapframe-geomask mapframe-geomask-fill
-    mapframe-geomask-fill-opacity mapframe-geomask-stroke-color
-    mapframe-geomask-stroke-colour mapframe-geomask-stroke-width
-    mapframe-height mapframe-id mapframe-length_km mapframe-length_mi
-    mapframe-line mapframe-line-stroke-color mapframe-line-stroke-colour
-    mapframe-marker mapframe-marker-color mapframe-marker-colour
-    mapframe-point mapframe-population mapframe-shape mapframe-shape-fill
-    mapframe-shape-fill-opacity mapframe-shape-stroke-color
-    mapframe-shape-stroke-colour mapframe-stroke-color mapframe-stroke-colour
-    mapframe-stroke-width mapframe-switcher mapframe-type mapframe-width
-    mapframe-wikidata mapframe-zoom
-'''.split())
-
-PUSHPIN_MAP_PARAMS = frozenset('''
-    coordinates pushpin_caption pushpin_relief pushpin_label
-    pushpin_label_position pushpin_label_size pushpin_map pushpin_mark
-    pushpin_mark_size pushpin_alt pushpin_background pushpin_map_size
-'''.split())
-
-# The settings that make the unknown-parameter check accept those names.
-_EXTRA_PARAMS = {'mapframe_args': MAPFRAME_PARAMS, 'pushpin_map_args': PUSHPIN_MAP_PARAMS}
+# Module:Check for unknown parameters accepts a list of map parameters of its
+# own when a template's call has |mapframe_args=y or |pushpin_map_args=y:
+# {the setting: the Lua table in the module that lists them}.  The bot reads
+# the lists from the module on every run (map_params), rather than keep a copy
+# that would drift whenever the module changed.
+MAP_SETTINGS = {'mapframe_args': 'mapframe_params', 'pushpin_map_args': 'pushpin_map_params'}
+UNKNOWN_CHECK_MODULE = 'Module:Check for unknown parameters'
 
 _UNKNOWN_MODULE = 'Check for unknown parameters'
 _DEPRECATED_MODULE = 'Check for deprecated parameters'
@@ -77,7 +57,9 @@ class KnownParams:
     setting: {name: setting}.  ``unknown_text`` is the check's raw
     ``unknown=`` wikitext, which holds the category link for pages with
     unknown parameters.  ``unsure`` are names whose fate the bot can't
-    tell: see WrappedParams."""
+    tell: see WrappedParams.  ``unread_settings`` are settings such as
+    ``mapframe_args`` whose names the bot couldn't get from the module, so it
+    can't tell what the template accepts."""
 
     def __init__(self, names: Iterable[str] = (), patterns: Iterable[LuaPattern] = (),
                  unknown_text: str | None = None,
@@ -87,6 +69,7 @@ class KnownParams:
         self.unknown_text = unknown_text
         self.extras = dict(extras or {})
         self.unsure: frozenset[str] = frozenset()
+        self.unread_settings: frozenset[str] = frozenset()
 
     def __repr__(self) -> str:
         return (f'KnownParams({len(self.names)} names, {len(self.patterns)} patterns, '
@@ -170,6 +153,7 @@ class WrappedParams(KnownParams):
         self.unknown_text = _fill_in(self._check_text(), self._settings())
         self.unsure = inner.unsure | {name for name in wrapper.sometimes_keeps
                                       if name not in inner}
+        self.unread_settings = inner.unread_settings
 
     def __repr__(self) -> str:
         return f'WrappedParams({self.wrapper.template!r}, {self.inner!r})'
@@ -289,9 +273,36 @@ def _list(value: str) -> list[str]:
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
-def known_params(source: str) -> KnownParams | None:
+def map_params(module_source: str) -> dict[str, frozenset[str]] | None:
+    """The map parameters Module:Check for unknown parameters accepts for
+    each setting in MAP_SETTINGS, read from the module's source: {setting:
+    names}.  None if the module doesn't have them where the bot expects, as
+    a list of plain names, used for that setting: it may have changed in a
+    way the bot doesn't understand, so it mustn't guess."""
+    found: dict[str, frozenset[str]] = {}
+    code = re.sub(r'--[^\n]*', '', module_source)   # Lua's comments
+    for setting, table in MAP_SETTINGS.items():
+        m = re.search(r'\blocal\s+' + table + r'\s*=\s*\{([^{}]*)\}', code)
+        # Used for that setting: the module reads the setting, and the table.
+        uses = (re.search(r"args\[\s*['\"]" + setting + r"['\"]\s*\]", code)
+                and re.search(r'\bipairs\(\s*' + table + r'\s*\)', code))
+        if not m or not uses:
+            return None
+        items = [item.strip() for item in m.group(1).split(',') if item.strip()]
+        names = [re.fullmatch(r"'([^'\\]+)'|\"([^\"\\]+)\"", item) for item in items]
+        if not names or not all(names):
+            return None   # something besides plain names: the bot can't tell
+        found[setting] = frozenset(n.group(1) or n.group(2) for n in names if n)
+    return found
+
+
+def known_params(source: str, map_names: Mapping[str, frozenset[str]] | None = None
+                 ) -> KnownParams | None:
     """The KnownParams declared in a template's source, or None if the
-    template has no unknown-parameter check the bot can read."""
+    template has no unknown-parameter check the bot can read.  map_names
+    are the map parameters the module adds for each setting (see
+    map_params); without them, a template that uses one of those settings
+    has it in unread_settings."""
     calls = list(_invokes(mwparserfromhell.parse(source), _UNKNOWN_MODULE))
     if not calls:
         return None
@@ -311,8 +322,11 @@ def known_params(source: str) -> KnownParams | None:
                     known.patterns.append(LuaPattern(value))
                 except LuaPatternError:
                     return None  # a pattern we can't read might cover anything
-            elif key in _EXTRA_PARAMS and value:
-                for extra in _EXTRA_PARAMS[key]:
+            elif key in MAP_SETTINGS and value:
+                if map_names is None or key not in map_names:
+                    known.unread_settings |= {key}
+                    continue
+                for extra in map_names[key]:
                     known.extras.setdefault(extra, key)
     return known
 

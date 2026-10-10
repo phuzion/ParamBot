@@ -22,6 +22,41 @@ OFFICEHOLDER_SOURCE = (
 OFFICEHOLDER_RULES = ('{| class="wikitable"\n|+ {{tl|Infobox officeholder}}\n'
                       '|-\n| {{para|termstart}} || {{para|term_start}}\n|}\n')
 OFFICEHOLDER_REVISION = 1001
+# Like Module:Check for unknown parameters, with shorter lists: the bot
+# reads the map parameters it accepts from here.
+UNKNOWN_CHECK_SOURCE = '''-- This module may be used to compare the arguments passed to the parent
+local p = {}
+
+local pushpin_map_params = {
+\t'coordinates',
+\t'pushpin_map',   -- the map itself
+\t'pushpin_map_size'
+}
+
+local mapframe_params = {
+\t'coordinates',
+\t'id',
+\t'qid',
+\t'mapframe',
+\t"mapframe-zoom",
+}
+
+function p._check(args, pargs)
+\tlocal knownargs = {}
+\tif isnotempty(args['mapframe_args']) then
+\t\tfor _, v in ipairs(mapframe_params) do
+\t\t\tknownargs[v] = 1
+\t\tend
+\tend
+\tif isnotempty(args['pushpin_map_args']) then
+\t\tfor _, v in ipairs(pushpin_map_params) do
+\t\t\tknownargs[v] = 1
+\t\tend
+\tend
+end
+
+return p
+'''
 
 
 def link_rule(template, revision=''):
@@ -262,6 +297,8 @@ def bot_pages(options, **changes):
                                          '== BRFA Trial Log ==\n# [[Special:Diff/1]]\n'),
         'Template:Infobox officeholder': FakePage('Template:Infobox officeholder',
                                                   OFFICEHOLDER_SOURCE),
+        'Module:Check for unknown parameters': FakePage('Module:Check for unknown parameters',
+                                                        UNKNOWN_CHECK_SOURCE),
     }
     for title, page in changes.items():
         pages[title] = page if page is not None else FakePage(title, exists=False)

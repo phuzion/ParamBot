@@ -1,4 +1,5 @@
 import pytest
+from fakes import UNKNOWN_CHECK_SOURCE
 
 from parambot.rules import parse_config
 from parambot.templatescan import (
@@ -8,9 +9,12 @@ from parambot.templatescan import (
     _to_number_form,
     categories_in,
     known_params,
+    map_params,
     scaffold_table,
     wrapper_call,
 )
+
+MAP_NAMES = map_params(UNKNOWN_CHECK_SOURCE)
 
 UNKNOWN = ('{{main other|[[Category:Pages using infobox example with unknown parameters'
            '|_VALUE_{{PAGENAME}}]]}}')
@@ -36,7 +40,7 @@ TEMPLATE = '''{{Infobox
 
 
 def test_known_params():
-    known = known_params(TEMPLATE)
+    known = known_params(TEMPLATE, MAP_NAMES)
     assert 'image_size' in known
     assert 'type' in known
     assert 'custom_label3_sec2' in known
@@ -62,7 +66,7 @@ def test_categories_in():
 
 
 def test_why_a_name_is_accepted():
-    known = known_params(TEMPLATE)
+    known = known_params(TEMPLATE, MAP_NAMES)
     assert 'coordinates' in known
     assert known.added_by('coordinates') == 'mapframe_args' # only because of mapframe_args=y
     assert known.added_by('image_size') is None             # the template's own list
@@ -70,7 +74,8 @@ def test_why_a_name_is_accepted():
     assert known.added_by('nonsense') is None               # not accepted at all
     # Listed by the template itself as well: its own list wins.
     listed = known_params(
-        '{{#invoke:Check for unknown parameters|check|mapframe_args=y| coordinates }}')
+        '{{#invoke:Check for unknown parameters|check|mapframe_args=y| coordinates }}',
+        MAP_NAMES)
     assert listed.added_by('coordinates') is None
 
 
@@ -80,6 +85,49 @@ def test_why_a_wrapper_accepts_a_name():
     assert known.added_by('coordinates') == 'mapframe_args'  # passed on to the map settings
     assert known.added_by('service_years') is None        # the wrapper uses it itself
     assert known.added_by('birth_name') is None
+
+
+def test_the_map_parameters_come_from_the_module():
+    # Comments and both kinds of quotes, as Lua allows.
+    names = map_params(UNKNOWN_CHECK_SOURCE)
+    assert names == {
+        'mapframe_args': {'coordinates', 'id', 'qid', 'mapframe', 'mapframe-zoom'},
+        'pushpin_map_args': {'coordinates', 'pushpin_map', 'pushpin_map_size'}}
+
+
+@pytest.mark.parametrize('change', [
+    ("local mapframe_params", "local frame_params"),            # renamed: not found
+    ("'qid',", "'qid', extra_names,"),                          # not just plain names
+    ("'qid',", "'qid' .. suffix,"),
+    ("ipairs(mapframe_params)", "ipairs(other_params)"),         # no longer used
+    ("args['pushpin_map_args']", "args['pushpin_args']"),        # for another setting
+    ("local mapframe_params = {", "local mapframe_params = { {"),
+])
+def test_a_module_the_bot_cannot_read_gives_no_map_parameters(change):
+    # It may have changed in a way that gives other names: the bot mustn't guess.
+    old, new = change
+    assert old in UNKNOWN_CHECK_SOURCE
+    assert map_params(UNKNOWN_CHECK_SOURCE.replace(old, new, 1)) is None
+
+
+def test_an_empty_list_is_not_read_as_accepting_nothing():
+    source = UNKNOWN_CHECK_SOURCE.replace(
+        "\t'coordinates',\n\t'pushpin_map',   -- the map itself\n\t'pushpin_map_size'\n", '')
+    assert map_params(source) is None
+
+
+def test_without_the_modules_lists_a_map_setting_is_unread():
+    known = known_params(TEMPLATE)
+    assert known.unread_settings == {'mapframe_args'}
+    assert 'mapframe-zoom' not in known
+    # A template that doesn't use them needs no list.
+    assert known_params('{{#invoke:Check for unknown parameters|check| name }}'
+                        ).unread_settings == set()
+    # Nor does mapframe_args set to nothing, which the module ignores.
+    assert known_params('{{#invoke:Check for unknown parameters|check|mapframe_args=| name }}'
+                        ).unread_settings == set()
+    # A wrapper of such a template can't tell either.
+    assert WrappedParams(wrapper_call(WRAPPER), known).unread_settings == {'mapframe_args'}
 
 
 def test_known_params_absent():
