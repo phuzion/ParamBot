@@ -207,7 +207,7 @@ On a template's rules page they must be for that template. These lines can't say
 |-
 | Two rows for the same old name, with different new names || Neither is used, and the report says so. || Delete the wrong row
 |-
-| No caption line, and names written without <code><nowiki>{{para}}</nowiki></code> || The bot ignores the table. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code>{|</code>
+| No caption line, and names written without <code><nowiki>{{para}}</nowiki></code> || The bot ignores the table. || Add <code><nowiki>|+ {{tl|Template name}}</nowiki></code> straight after <code><nowiki>{|</nowiki></code>
 |-
 | Old and new columns swapped || The rules never do anything, because the template accepts the "old" names. The report's ''Notes'' say so. || Swap the columns
 |-
