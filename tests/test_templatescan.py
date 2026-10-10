@@ -63,11 +63,11 @@ def test_categories_in():
 
 def test_why_a_name_is_accepted():
     known = known_params(TEMPLATE)
-    assert 'coord' in known
-    assert known.added_by('coord') == 'mapframe_args'     # only because of mapframe_args=y
-    assert known.added_by('image_size') is None           # the template's own list
-    assert known.added_by('custom_label3_sec2') is None   # its own pattern
-    assert known.added_by('nonsense') is None             # not accepted at all
+    assert 'coordinates' in known
+    assert known.added_by('coordinates') == 'mapframe_args' # only because of mapframe_args=y
+    assert known.added_by('image_size') is None             # the template's own list
+    assert known.added_by('custom_label3_sec2') is None     # its own pattern
+    assert known.added_by('nonsense') is None               # not accepted at all
     # Listed by the template itself as well: its own list wins.
     listed = known_params('{{#invoke:Check for unknown parameters|check|mapframe_args=y| coord }}')
     assert listed.added_by('coord') is None

@@ -222,9 +222,9 @@ def test_rules_for_map_parameters_the_check_adds_are_not_needed():
         'Infobox officeholder: 1 rule waits because the template still accepts its old name, '
         '"term_end". That is normal: the rule starts working once the template drops that '
         'name. If the rule is backwards, swap its names.',
-        "Infobox officeholder: 2 rules aren't needed, because \"coord\" and \"id\" are map "
+        "Infobox officeholder: 1 rule isn't needed, because \"id\" is one of the map "
         'parameters that Module:Check for unknown parameters accepts for any template with '
-        'mapframe_args=y. Delete the rules unless the template stops using mapframe_args.']
+        'mapframe_args=y. Delete the rule unless the template stops using mapframe_args.']
     assert report.problems == []
 
 

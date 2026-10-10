@@ -33,7 +33,7 @@ __all__ = ['KnownParams', 'WrappedParams', 'Wrapper', 'known_params', 'wrapper_c
 # Copied from Module:Check for unknown parameters, which adds these names
 # when the call has |mapframe_args=y or |pushpin_map_args=y.
 MAPFRAME_PARAMS = frozenset('''
-    coord coordinates id qid mapframe mapframe-area_km2 mapframe-area_mi2
+    coordinates id qid mapframe mapframe-area_km2 mapframe-area_mi2
     mapframe-caption mapframe-coord mapframe-coordinates mapframe-custom
     mapframe-frame-coord mapframe-frame-coordinates mapframe-frame-height
     mapframe-frame-width mapframe-geomask mapframe-geomask-fill
