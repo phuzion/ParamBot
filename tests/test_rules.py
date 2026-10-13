@@ -1,3 +1,5 @@
+import pytest
+
 from parambot.messages import plain
 from parambot.rules import REMOVE, parse_config
 
@@ -431,3 +433,55 @@ def test_problems_for_common_mistakes():
     assert rs.renames['a'].conflict == 'skip'
     assert 'dup' not in rs.renames
     assert 'T1' in config.rulesets   # the first template in the caption is used
+
+
+# -- a real "#" in a name ----------------------------------------------------
+
+def reactor(*rows):
+    """Infobox reactor's rules page, with the given rows."""
+    lines = ''.join(f'|-\n| {old} || {new}\n' for old, new in rows)
+    config = parse_config('{| class="wikitable"\n|+ {{tl|Infobox reactor}}\n' + lines + '|}\n')
+    return config, config.rulesets.get('Infobox reactor')
+
+
+@pytest.mark.parametrize('written', ['&#35;', '&#035;', '&#x23;', '&#X23;', '&num;'])
+def test_a_real_hash_is_written_as_an_entity(written):
+    # Like Infobox reactor's #_of_staff: "#" is part of the name, not a
+    # number.  The wiki shows the entity as "#", so the page reads as it is.
+    config, rs = reactor((f'{{{{para|{written}_of_staff}}}}', '{{para|num_staff}}'))
+    assert config.problems == []
+    assert rs.renames['#_of_staff'].new == 'num_staff'
+    assert rs.lookup('#_of_staff').target == 'num_staff'
+    assert rs.lookup('2_of_staff') is None        # not a number
+
+
+def test_a_real_hash_and_a_number_in_one_name():
+    config, rs = reactor(('{{para|&#35;_of_unit#}}', '{{para|unit_count#}}'),
+                         ('{{para|old#}}', '{{para|&#35;_new#}}'))
+    assert config.problems == []
+    assert rs.lookup('#_of_unit2').target == 'unit_count2'
+    assert rs.lookup('#_of_unit').target == 'unit_count'
+    assert rs.lookup('_of_unit2') is None
+    assert rs.lookup('old3').target == '#_new3'
+    # As written, for messages: the real "#" stays an entity.
+    assert [rule.old for rule in rs.patterns] == ['&#35;_of_unit#', 'old#']
+
+
+def test_a_real_hash_can_be_removed_and_disagreed_about():
+    config, rs = reactor(('{{para|&#35;_old}}', 'remove'),
+                         ('{{para|&#35;_dup}}', '{{para|one}}'),
+                         ('{{para|&#35;_dup}}', '{{para|two}}'))
+    assert set(rs.removes) == {'#_old'}
+    assert '#_dup' not in rs.renames
+    assert [plain(p) for p in config.problems] == [
+        'Infobox reactor: "#_dup" is renamed to both "one" and "two", so the bot uses '
+        'neither. Delete the wrong row.']
+
+
+def test_a_bare_hash_in_one_name_is_still_a_mistake():
+    # It might be a typo for a number, so the bot says so, rather than
+    # guess that it's part of the name.
+    config, rs = reactor(('{{para|#_of_staff}}', '{{para|num_staff}}'))
+    assert rs is None or not rs.rules
+    [problem] = [plain(p) for p in config.problems]
+    assert '"#_of_staff" → "num_staff" has "#" in only one of the names' in problem

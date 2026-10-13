@@ -63,6 +63,12 @@ __all__ = ['Rule', 'Match', 'RuleSet', 'Config', 'parse_config']
 AWB_TEMPLATE = msg.AWB_TEMPLATE
 NUMBER = '#'                 # stands for no number or any number
 MAX_NUMBERS = 9              # Lua patterns allow nine captures
+# A real "#" in a parameter name, such as Infobox reactor's #_of_staff, is
+# written &#35; (or &#x23; or &num;), which the wiki shows as "#", so that it
+# isn't taken for NUMBER.  While a rule is read, it's held as this character.
+_REAL_HASH = ''
+_REAL_HASH_RE = re.compile(r'&(?:#0*35|#[xX]0*23|num);')
+REAL_HASH_ENTITY = '&#35;'
 DEFAULT_SEPARATOR = '<br />'
 
 RENAME = 'rename'
@@ -82,8 +88,10 @@ _LUA_MAGIC = set('^$()%.[]*+-?')
 @dataclass(frozen=True)
 class Rule:
     kind: str                            # RENAME or REMOVE
-    old: str                             # the old name as written, possibly with "#"
-    new: str | None = None               # the new name as written, possibly with "#"
+    # The names.  Without NUMBER, they're the parameters' real names, a real
+    # "#" included.  With it, they're as written, a real "#" as &#35;.
+    old: str
+    new: str | None = None
     pattern: LuaPattern | None = None    # for names with "#"
     replacement: str | None = None       # Lua replacement, for renames with "#"
     conflict: str = SKIP                 # SKIP or MERGE
@@ -140,10 +148,11 @@ class RuleSet:
         others = tuple(m.rule for m in matches[1:] if m.target != first.target)
         return Match(first.rule, first.target, others)
 
-    def written(self, old: str) -> Rule | None:
+    def written(self, old: str, pattern: bool | None = None) -> Rule | None:
         """The rule for an old name exactly as written: "termstart#", not
-        "termstart2"."""
-        if NUMBER in old:
+        "termstart2".  pattern says whether old has NUMBER in it, for a name
+        with a real "#" such as #_of_staff; by default, any "#" is NUMBER."""
+        if NUMBER in old if pattern is None else pattern:
             return next((rule for rule in self.patterns if rule.old == old), None)
         return self.renames.get(old) or self.removes.get(old)
 
@@ -422,15 +431,18 @@ def _add_rule(ruleset: RuleSet, old: str, new: str | None, conflict: str,
               problems: list[str]) -> None:
     """Add the rule old → new (new is None for "remove"), unless it's broken
     or another row for old disagrees with it."""
-    problem = _rule_problem(ruleset.template, old, new)
+    read_old, read_new = _read_hashes(old), None if new is None else _read_hashes(new)
+    problem = _rule_problem(ruleset.template, read_old, read_new)
     if problem:
         problems.append(problem)
         return
+    pattern = NUMBER in read_old
+    old, new = _kept(read_old), None if read_new is None else _kept(read_new)
     if old == new or old in ruleset.ignored:
         return
-    existing = ruleset.written(old)
+    existing = ruleset.written(old, pattern)
     if existing is None:
-        ruleset.put(_new_rule(old, new, conflict))
+        ruleset.put(_new_rule(read_old, read_new, conflict))
     elif existing.new != new:
         # The rows disagree about what old becomes, so don't guess.
         ruleset.discard(old)
@@ -444,47 +456,64 @@ def _add_rule(ruleset: RuleSet, old: str, new: str | None, conflict: str,
         ruleset.put(dataclasses.replace(existing, conflict=SKIP))
 
 
+def _read_hashes(name: str) -> str:
+    """name with each real "#", written &#35;, held as _REAL_HASH."""
+    return _REAL_HASH_RE.sub(_REAL_HASH, name)
+
+
+def _kept(name: str) -> str:
+    """How a rule keeps a name read by _read_hashes (see Rule)."""
+    return name.replace(_REAL_HASH, REAL_HASH_ENTITY if NUMBER in name else '#')
+
+
 def _rule_problem(template: str, old: str, new: str | None) -> str | None:
+    """What's wrong with old → new, read by _read_hashes, if anything."""
+    shown_old, shown_new = _kept(old), None if new is None else _kept(new)
     for name in (old, new):
         if name is None:
             continue
         if not _plain(name):
-            return msg.markup_in_name(template, old, new)
+            return msg.markup_in_name(template, shown_old, shown_new)
         if ',' in name or ';' in name:
-            return msg.several_names_in_one(template, name)
+            return msg.several_names_in_one(template, _kept(name))
     numbers = old.count(NUMBER)
-    if new is not None and new.count(NUMBER) != numbers:
-        return msg.number_in_one_name(template, old, new)
+    if new is not None and shown_new is not None and new.count(NUMBER) != numbers:
+        return msg.number_in_one_name(template, shown_old, shown_new)
     if numbers > MAX_NUMBERS:
-        return msg.too_many_numbers(template, old)
+        return msg.too_many_numbers(template, shown_old)
     return None
 
 
 def _new_rule(old: str, new: str | None, conflict: str) -> Rule:
-    """The rule old → new (new is None for "remove")."""
+    """The rule old → new (new is None for "remove"), read by _read_hashes."""
+    kept_old, kept_new = _kept(old), None if new is None else _kept(new)
     if NUMBER not in old:
-        return Rule(REMOVE, old) if new is None else Rule(RENAME, old, new, conflict=conflict)
+        return (Rule(REMOVE, kept_old) if new is None
+                else Rule(RENAME, kept_old, kept_new, conflict=conflict))
     pattern = _number_pattern(old)
     if new is None:
-        return Rule(REMOVE, old, pattern=pattern)
-    return Rule(RENAME, old, new, pattern=pattern, replacement=_number_replacement(new),
-                conflict=conflict)
+        return Rule(REMOVE, kept_old, pattern=pattern)
+    return Rule(RENAME, kept_old, kept_new, pattern=pattern,
+                replacement=_number_replacement(new), conflict=conflict)
 
 
 def _number_pattern(old: str) -> LuaPattern:
-    """termstart# -> the Lua pattern termstart(%d*)."""
+    """termstart# -> the Lua pattern termstart(%d*).  A real "#" is itself."""
     return LuaPattern(''.join(
-        '(%d*)' if c == NUMBER else '%' + c if c in _LUA_MAGIC else c for c in old))
+        '(%d*)' if c == NUMBER else '#' if c == _REAL_HASH
+        else '%' + c if c in _LUA_MAGIC else c for c in old))
 
 
 def _number_replacement(new: str) -> str:
-    """term_start# -> the Lua replacement term_start%1."""
+    """term_start# -> the Lua replacement term_start%1.  A real "#" is itself."""
     out = []
     count = 0
     for c in new:
         if c == NUMBER:
             count += 1
             out.append(f'%{count}')
+        elif c == _REAL_HASH:
+            out.append('#')
         else:
             out.append('%%' if c == '%' else c)
     return ''.join(out)

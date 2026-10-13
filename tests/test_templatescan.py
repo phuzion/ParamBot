@@ -305,3 +305,17 @@ def test_scaffold_reports_unconvertible_patterns():
 
 def test_scaffold_without_deprecated_check():
     assert scaffold_table('X', '{{Infobox}}') == (None, [])
+
+
+def test_scaffold_writes_a_real_hash_as_an_entity():
+    # So that the table it makes reads #_of_staff as a name, not a number.
+    source = ('{{#invoke:Check for deprecated parameters|check'
+              '| #_of_staff = num_staff | _remove = #_old }}')
+    table, warnings = scaffold_table('Infobox reactor', source)
+    assert warnings == []
+    assert '| {{para|&#35;_of_staff}} || {{para|num_staff}}' in table
+    assert '| {{para|&#35;_old}} || remove' in table
+    config = parse_config(table)
+    assert config.problems == []
+    rs = config.rulesets['Infobox reactor']
+    assert rs.renames['#_of_staff'].new == 'num_staff' and set(rs.removes) == {'#_old'}

@@ -391,7 +391,8 @@ def _deprecated_pairs(code: Wikicode) -> tuple[list[tuple[str, str | None]], lis
             if not param.showkey or key in _NOT_RULES:
                 continue
             if key == '_remove':
-                pairs += [(name.strip(), None) for name in value.split(';') if name.strip()]
+                pairs += [(_real_hashes(name.strip()), None)
+                          for name in value.split(';') if name.strip()]
             elif re.fullmatch(r'_regexp[1-9][0-9]*', key):
                 parts = re.split(r'\s*=\s*', value)
                 converted = _to_number_form(parts[0], parts[1]) if len(parts) == 2 else None
@@ -400,8 +401,15 @@ def _deprecated_pairs(code: Wikicode) -> tuple[list[tuple[str, str | None]], lis
                 else:
                     warnings.append(f'{key} = {value}')
             elif value:
-                pairs.append((key, value))
+                pairs.append((_real_hashes(key), _real_hashes(value)))
     return pairs, warnings
+
+
+def _real_hashes(name: str) -> str:
+    """A name from the deprecated check as a rules page writes it: a real
+    "#", as in #_of_staff, as &#35;, since a bare "#" there stands for a
+    number."""
+    return name.replace('#', '&#35;')
 
 
 _NUMBER_GROUP_RE = re.compile(r'\(%d[*+?]?\)')

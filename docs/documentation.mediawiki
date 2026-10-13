@@ -173,7 +173,7 @@ Each rules page holds an ordinary table, with the old names on the left and the 
 |}
 </syntaxhighlight>
 
-* <code>#</code> stands for a number, or no number, so {{para|termstart#}} covers {{para|termstart}}, {{para|termstart2}}, {{para|termstart12}} and so on.
+* <code>#</code> stands for a number, or no number, so {{para|termstart#}} covers {{para|termstart}}, {{para|termstart2}}, {{para|termstart12}} and so on. A "#" that's really part of a name, as in {{para|&#35;_of_staff}}, is written <code><nowiki>&#35;</nowiki></code>.
 * <code>remove</code> is for a parameter dropped with no replacement.
 * <code>merge</code>, in an optional ''If both are set'' column, combines the two values instead of leaving the article for a human. It's only for lists, such as schools.
 * A caption linking to a category, such as <code><nowiki>|+ {{tl|Infobox bone}} watches [[:Category:Anatomy infobox template using unknown parameters]]</nowiki></code>, is for the few templates that don't use the usual category. The bot checks which category every template really uses, and the report says if a table has it wrong.

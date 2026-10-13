@@ -76,6 +76,7 @@ A bad edit to a rules page does nothing, since nobody has approved it. Revert it
 * Write each name as {{tlx|para|name}}. Anything else in the cell is a note, which the bot ignores, such as <code><nowiki>{{para|spouse}} (will use {{tl|pluralize from text}})</nowiki></code>.
 * Copy names exactly. Capital letters matter: {{para|Imagesize}} and {{para|imagesize}} are different parameters. Spaces are fine, for example {{para|honorific prefix}}.
 * '''Numbered parameters:''' put <code>#</code> where the number goes, in both names. Two numbers work too, as in {{para|blank#_name_sec#}} → {{para|custom_label#_sec#}}.
+* '''A parameter whose name really has a "#" in it,''' such as {{para|&#35;_of_staff}}: write that "#" as <code><nowiki>&#35;</nowiki></code>, as in <code><nowiki>{{para|&#35;_of_staff}}</nowiki></code>. The page still shows it as "#", but the bot knows it's part of the name, not a number.
 * '''Parameters with no replacement:''' write <code>remove</code> in the new-name column. If one of these comes back, the bot deletes it and its value.
 * '''Several old names with the same new name''' can each have a row, share a row (<code><nowiki>{{para|alma_mater}} {{para|alma mater}}</nowiki></code>), or share one new-name cell using <code>rowspan</code>.
 * '''One old name, one new name.''' If two rows for the same old name give different new names, or one renames it and another removes it, the bot uses neither and the report says so. If only some of its rows say <code>merge</code>, the bot doesn't merge.
@@ -217,7 +218,7 @@ On a template's rules page they must be for that template. These lines can't say
 |-
 | An empty new-name cell || The row is ignored and reported. || Write the new name, or <code>remove</code>
 |-
-| <code>#</code> in only one of the names || The row is ignored and reported. || Use <code>#</code> in both names or in neither
+| <code>#</code> in only one of the names || The row is ignored and reported. || Use <code>#</code> in both names or in neither. If the "#" is really part of a name, write it as <code><nowiki>&#35;</nowiki></code>
 |-
 | Several names as plain text: <code>a, b</code> || The row is ignored and reported. || Write each name as <code><nowiki>{{para|name}}</nowiki></code>
 |-

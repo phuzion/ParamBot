@@ -395,3 +395,18 @@ def test_explicit_category_overrides_a_default_from_another_table():
                           + table('Infobox bone', ('c', 'd'), caption_extra=f' [[:{ANATOMY}]]'))
     assert config.problems == []
     assert config.rulesets['Infobox bone'].category == ANATOMY
+
+
+def test_a_name_with_a_real_hash_is_fixed_in_articles():
+    # Infobox reactor dropped #_of_staff for num_staff.
+    reactor = FakePage('Template:Infobox reactor', (
+        '{{#invoke:Check for unknown parameters|check|unknown=[[Category:Pages using infobox '
+        'reactor with unknown parameters|_VALUE_]]| name | num_staff | num_operators }}'))
+    rules = parse_config(table('Infobox reactor', ('&#35;_of_staff', 'num_staff'),
+                               ('&#35;_of_operators', 'num_operators')))
+    prepared, report = run_prepare(FakeWiki(reactor, MODULE),
+                                   rules.rulesets['Infobox reactor'])
+    assert report.problems == [] and len(prepared.ready) == 1
+    result = fix_wikitext('{{Infobox reactor\n| #_of_staff = 50\n| #_of_operators = 2\n}}',
+                          prepared.ready)
+    assert result.text == '{{Infobox reactor\n| num_staff = 50\n| num_operators = 2\n}}'

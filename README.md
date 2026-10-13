@@ -243,7 +243,10 @@ wiki as exactly what the bot will do:
   other extra columns are notes.
 - **Numbers:** `#` stands for no number or any number, so `termstart#`
   covers `termstart`, `termstart2`, `termstart12`, and so on. An exact name
-  beats a `#` name, so `termstart2` can have a rule of its own.
+  beats a `#` name, so `termstart2` can have a rule of its own. A real `#` in
+  a parameter's name, as in Infobox reactor's `#_of_staff`, is written
+  `&#35;` (`{{para|&#35;_of_staff}}`), which the wiki shows as `#`.
+  `scaffold` writes it that way itself.
 - **One rule per old name:** rows for the same old name must agree. If they
   give different new names, neither is used; if only some say `merge`, the
   bot doesn't merge. Both are reported.
