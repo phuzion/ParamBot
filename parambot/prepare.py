@@ -101,9 +101,12 @@ def prepare(wiki: Wiki, rulesets: Iterable[RuleSet], report: Report) -> Prepared
 def _template_for(ruleset: RuleSet, page: WikiPage, report: Report,
                   prepared: Prepared) -> WikiPage | None:
     """The template a rule set is for, after any redirect, or None if it
-    doesn't exist."""
+    doesn't exist.  That's only a problem for active rules: inactive ones
+    for a template that's gone, such as one deleted after its parameters
+    were cleaned up, are simply inactive, and the report lists them so."""
     if not page.exists():
-        report.problems.append(msg.template_missing(ruleset.template))
+        if ruleset.active:
+            report.problems.append(msg.template_missing(ruleset.template))
         return None
     if page.isRedirectPage():
         page = page.getRedirectTarget()

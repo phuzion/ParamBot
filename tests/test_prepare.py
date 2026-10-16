@@ -1,5 +1,7 @@
 """Checking rule sets against the templates on the wiki."""
 
+import dataclasses
+
 import pytest
 from fakes import OFFICEHOLDER_SOURCE, UNKNOWN_CHECK_SOURCE, FakePage, FakeWiki
 
@@ -86,6 +88,14 @@ def test_missing_template():
     assert report.problems == [
         'Template:Infobox officeholder does not exist, so its rules are switched off. '
         'Check the spelling of its name.']
+
+
+def test_a_missing_template_with_inactive_rules_is_no_problem():
+    # Such as Infobox art historian, deleted once its articles moved to
+    # another infobox: its rules were moved to Inactive, and that's all.
+    ruleset = dataclasses.replace(officeholder(('a', 'b')), active=False)
+    prepared, report = run_prepare(FakeWiki(), ruleset)
+    assert (prepared.ready, report.problems, report.notes) == ([], [], [])
 
 
 def test_template_without_a_parameter_list_is_switched_off():
