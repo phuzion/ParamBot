@@ -80,6 +80,15 @@ def run_times(started: datetime, ended: datetime) -> str:
             f'{duration((ended - started).total_seconds())}')
 
 
+def rules_summary(active: int, inactive: int, rules: int) -> str:
+    """"Rules: 196 rules pages (190 active, 6 inactive), 4,394 rules."."""
+    pages = active + inactive
+    page_word = 'rules page' if pages == 1 else 'rules pages'
+    rule_word = 'rule' if rules == 1 else 'rules'
+    return (f'Rules: {pages:,} {page_word} ({active:,} active, {inactive:,} inactive), '
+            f'{rules:,} {rule_word}.')
+
+
 def excerpt(text: object, limit: int = 60) -> str:
     """text on one line, cut to limit characters."""
     flat = ' '.join(str(text).split())

@@ -195,7 +195,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 * the report shows no problems for the template, which is easiest to check by approving the new revision under Inactive first
 
 == The report ==
-[[User:ParamBot/Report]] is rewritten on every run. Its "Last run" line says when the run started and ended, in UTC, and how long it took, so the page's history is a log of the runs. Wherever it names a rules page, a template or a diff, it links to it. Its sections:
+[[User:ParamBot/Report]] is rewritten on every run. Its "Last run" line says when the run started and ended, in UTC, how long it took, and how many rules pages and rules it read, so the page's history is a log of the runs. Wherever it names a rules page, a template or a diff, it links to it. Its sections:
 
 {| class="wikitable"
 ! Section !! What it lists !! What to do

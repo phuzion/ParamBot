@@ -58,7 +58,8 @@ replacement.
 6. **Writes the report** to `User:ParamBot/Report`, listing articles that
    need human review, articles it skipped and why, and problems in the rules.
    It starts with `{{User:ParamBot/Header}}`, then when the run started and
-   ended and how long it took, and links each rules page, template and diff
+   ended, how long it took, and how many rules pages (active and inactive)
+   and rules it read, and links each rules page, template and diff
    it names. It ends with a comment naming the git commit of the bot that
    wrote it, such as `<!-- ParamBot 24cef13 -->`. It's saved on every run,
    so its history is a log of the runs.

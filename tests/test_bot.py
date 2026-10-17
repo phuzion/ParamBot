@@ -1059,3 +1059,15 @@ def test_a_long_edit_summary_leaves_no_link_broken():
     assert len(summary) <= SUMMARY_LIMIT
     assert '…' in summary
     assert summary.count('[[') == summary.count(']]')
+
+
+def test_the_report_counts_the_rules_pages_and_rules(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    inactive = rules_page(opts, 'Infobox person', OFFICEHOLDER_RULES.replace(
+        'Infobox officeholder', 'Infobox person'), 3001)
+    wiki = wiki_for(opts, **index(opts, ACTIVE_OFFICEHOLDER + '== Inactive ==\n'
+                                  + link_rule('Infobox person', 3001)))
+    wiki.add(inactive)
+    ParamBot(wiki, opts).run()
+    [report] = wiki.pages[opts.report_page].saved
+    assert 'Rules: 2 rules pages (1 active, 1 inactive), 2 rules.' in report.splitlines()[2]

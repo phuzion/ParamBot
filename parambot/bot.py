@@ -330,6 +330,10 @@ class ParamBot:
         if not config.rulesets:
             self.report.problems.append(msg.no_rules(self.options.rules_source))
         rulesets = list(config.rulesets.values())
+        # All of them, for the report's top line, even if this run uses some.
+        self.report.rules_pages_active = sum(ruleset.active for ruleset in rulesets)
+        self.report.rules_pages_inactive = len(rulesets) - self.report.rules_pages_active
+        self.report.rules = sum(map(len, rulesets))
         if self.options.templates:
             wanted = {normalize_template_name(t) for t in self.options.templates}
             rulesets = [ruleset for ruleset in rulesets if ruleset.template in wanted]

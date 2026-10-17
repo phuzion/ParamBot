@@ -223,3 +223,19 @@ def test_the_review_table_links_each_templates_rules():
     report.issue('Foo', Issue('Infobox person', 'alma_mater', 'education', 'both set'))
     assert (f'[[Template:Infobox person|Infobox person]] ([[{RULES}/Infobox person|rules]])'
             in report.body())
+
+
+@pytest.mark.parametrize('active, inactive, rules, said', [
+    (190, 6, 4394, 'Rules: 196 rules pages (190 active, 6 inactive), 4,394 rules.'),
+    (1, 0, 1, 'Rules: 1 rules page (1 active, 0 inactive), 1 rule.'),
+])
+def test_the_rules_summary(active, inactive, rules, said):
+    assert msg.rules_summary(active, inactive, rules) == said
+
+
+def test_the_stats_line_counts_the_rules_once_read():
+    report = Report(started=at(2026, 10, 16, 1, 23), ended=at(2026, 10, 16, 1, 24))
+    assert 'Rules:' not in report.stats_line(live=True)
+    report.rules_pages_active, report.rules_pages_inactive, report.rules = 190, 6, 4394
+    assert report.stats_line(live=True).endswith(
+        'made 0 edits. Rules: 196 rules pages (190 active, 6 inactive), 4,394 rules.')

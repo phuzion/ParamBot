@@ -261,7 +261,8 @@ def article():
 def test_a_finished_run_exits_with_0_and_prints_what_it_did(monkeypatch, tmp_path, capsys):
     wiki = wiki_for(options()).populate(OFFICEHOLDER_CATEGORY, article())
     assert run_main(monkeypatch, tmp_path, wiki, 'run', '--out-dir', str(tmp_path / 'out')) == 0
-    assert capsys.readouterr().out.rstrip().endswith('would have made (dry run) 1 edit.')
+    assert capsys.readouterr().out.rstrip().endswith(
+        'would have made (dry run) 1 edit. Rules: 1 rules page (1 active, 0 inactive), 1 rule.')
     assert list((tmp_path / 'out').glob('edits-*.diff'))
 
 

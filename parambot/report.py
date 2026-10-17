@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .fixer import Issue
-from .messages import CODE, MARKED_RE, PARA, QUOTED, TL, count, run_times
+from .messages import CODE, MARKED_RE, PARA, QUOTED, TL, count, rules_summary, run_times
 
 __all__ = ['Links', 'Report']
 
@@ -139,6 +139,11 @@ class Report:
     links: Links = field(default_factory=Links)
     started: datetime | None = None   # when the run started, in UTC
     ended: datetime | None = None     # when it ended: when the report was written
+    # The rules the run read: rules pages with rules the bot could read, and
+    # the rules on them.  None until they've been read.
+    rules_pages_active: int | None = None
+    rules_pages_inactive: int = 0
+    rules: int = 0
 
     def issue(self, title: str, issue: Issue) -> None:
         self.issues.append((title, issue))
@@ -154,10 +159,13 @@ class Report:
             verb = 'made' if live else 'would have made (dry run)'
         when = (run_times(self.started, self.ended) if self.started and self.ended
                 else 'time not recorded')
+        rules = ('' if self.rules_pages_active is None else ' ' + rules_summary(
+            self.rules_pages_active, self.rules_pages_inactive, self.rules))
         return (f'Last run: {when}. Polled '
                 f'{count(self.categories_polled, "category", "categories")}, '
                 f'{self.categories_populated} populated; checked '
-                f'{count(self.pages_checked, "page")}; {verb} {count(self.edits, "edit")}.')
+                f'{count(self.pages_checked, "page")}; {verb} {count(self.edits, "edit")}.'
+                + rules)
 
     def body(self) -> str:
         """The report's sections: everything below the stats line."""

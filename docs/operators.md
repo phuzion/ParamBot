@@ -100,7 +100,7 @@ The commands below assume you're in `~/parambot`.
 ```bash
 toolforge jobs show parambot     # the schedule, when it last ran, and how it ended
 tail -n 40 ~/parambot.err        # the log of the latest run
-tail -n 3 ~/parambot.out         # one line per run: "Last run: ... (reporting only) 3 edits."
+tail -n 3 ~/parambot.out         # one line per run: "Last run: ... 3 edits. Rules: ..."
 ```
 
 Or look at User:ParamBot/Report and its history.
