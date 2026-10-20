@@ -43,11 +43,10 @@ The job is called `parambot`, and is defined in
 
 - **When:** every six hours, at 01:23, 07:23, 13:23 and 19:23 UTC.
   `toolforge jobs show parambot` shows when it last ran.
-- **What:** `python -m parambot run --live --trial --max-hours 5`, during
-  the BRFA trial: it edits until the trial's count is reached (see
-  [A BRFA trial](#a-brfa-trial)). Outside the trial, until the BRFA is
-  approved, `--report-only` instead: it updates the report and edits no
-  articles.
+- **What:** `python -m parambot run --live --max-hours 5`: the bot was
+  approved on 17 October 2026, so it edits. For a trial of a new task, see
+  [A BRFA trial](#a-brfa-trial); to have it only report, use
+  `--report-only` instead.
 - **Image:** `python3.13`. It must match the Python the venv was built with.
 - **Email:** Toolforge emails the tool's maintainers when a run fails.
 
@@ -269,7 +268,11 @@ When the trial's done:
 1. Check that the account has the bot flag, at
    [Special:UserRights/ParamBot](https://en.wikipedia.org/wiki/Special:UserRights/ParamBot).
    Live runs refuse to start without it, and the bot password needs the
-   *High-volume (bot) access* grant.
+   *High-volume (bot) access* grant. It also needs *Edit protected pages*, or
+   extended-confirmed protected articles are skipped as "page is protected".
+   After changing a bot password's grants, delete `pywikibot-ParamBot.lwp`,
+   so the next run logs in afresh with them (see
+   [Change the bot password](#change-the-bot-password)).
 2. In the repository, change `--report-only` to `--live` in
    `deploy/jobs.yaml`, commit and push. Then on Toolforge:
 
@@ -353,6 +356,7 @@ Toolforge plans to stop writing job logs to files. After that, read them with
 | `Logged in as 'X', expected 'ParamBot'` | `user-config.py` or `user-password.py` is for another account. | Fix them. |
 | `ParamBot does not have the bot right; use --trial for BRFA trial edits` | A live run without the bot flag, or without the bot password's *High-volume (bot) access* grant. | Use `--trial` for a trial; otherwise check the flag and the grant. |
 | `Stopped before editing any more articles, because saving … failed with session-page-restricted`, in the log and under *Errors* on the report | The bot is logged in with a bot password that may only edit certain pages, often a saved login from an old one, such as a report-only password. The report saves; articles don't. The run stops at the first article, with exit code 1. | Delete `pywikibot-ParamBot.lwp`, or reset the old bot password: see [Change the bot password](#change-the-bot-password). The log's `Logged in as …` line says which login it used. |
+| "page is protected", under *Not edited* on the report | The wiki refused the edit because of the article's protection. The bot doesn't check protection first: it tries, skips the article, and tries again next run. | Extended-confirmed protection: check that the bot password has *Edit protected pages*, and delete `pywikibot-ParamBot.lwp` after changing it. Template-editor or full protection: the account can't edit it, so fix the article by hand or ask at [Requests for page protection](https://en.wikipedia.org/wiki/Wikipedia:Requests_for_page_protection). |
 | `Stopped before editing any more articles, because saving … failed with blocked` (or `autoblocked`, or `readonly`) | The bot is blocked, its IP address is caught by an autoblock, or the wiki is read-only. Every other edit would fail too, so it stopped. | For a block, see the block log and its reason before doing anything else. A read-only wiki is temporary: the next run tries again. |
 | `Could not log in as ParamBot` | Neither the saved login nor the bot password worked. | Check `user-config.py` and `user-password.py`, and the bot password at Special:BotPasswords. |
 | `parambot: error: …/parambot.toml: …` | A mistake in the settings file. | Fix the setting it names. |

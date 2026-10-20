@@ -12,11 +12,10 @@ information, and the article lands in the template's *Pages using
 categories four times a day and renames the old parameters to the new ones.
 It never reverts anyone's edit and changes nothing else.
 
-**Status:** in a 100-edit trial at
-[Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot).
-Until the trial's done it edits articles, with "BRFA trial" at the start of
-each edit summary. After that it runs in report-only mode, editing no
-articles, until the bot is approved. See [Status](#status).
+**Status:** approved on 17 October 2026 at
+[Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot),
+after a 100-edit trial. It runs live on Toolforge every six hours. See
+[Status](#status).
 
 ## What it does to a page
 
@@ -428,7 +427,11 @@ updates, stopping it, trials and common problems.
    versions match.
 2. On the bot account, create a
    [bot password](https://en.wikipedia.org/wiki/Special:BotPasswords) with the
-   *High-volume (bot) access* and *Edit existing pages* grants.
+   *High-volume (bot) access*, *Edit existing pages* and *Edit protected
+   pages* grants. Without *Edit protected pages*, the bot can't use the
+   account's `extendedconfirmed` right, so it skips extended-confirmed
+   protected articles as "page is protected". The account's rights still
+   keep it out of template-editor and fully protected ones.
 3. Copy [`deploy/user-config.example.py`](deploy/user-config.example.py) to
    `~/parambot/user-config.py`, and put the bot password in
    `~/parambot/user-password.py`. To change any [settings](#settings), copy
@@ -521,15 +524,11 @@ the templates (`prepare`), then applies the active ones to each article
 - **Approval.** The bot approval request,
   [Wikipedia:Bots/Requests for approval/ParamBot](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot),
   was filed on 1 October 2026. A trial of 100 edits was approved on 4 October
-  and started on 5 October. Its edits and any problems are logged at
+  and finished on 11 October. Its edits and the issues found are logged at
   [User:ParamBot/BRFA Log](https://en.wikipedia.org/wiki/User:ParamBot/BRFA_Log).
-  The bot has no bot flag yet, and its user page says `status=unapproved`.
-- **Running.** The bot runs four times a day on Toolforge, with
-  `--live --trial`, and `User:ParamBot/Run` says `yes`. Each run edits
-  articles until the trial's count reaches 100, then only reports. After the
-  trial, the job goes back to `--report-only` and the Run page to `report`
-  until the bot is approved (see
-  [the operators' guide](docs/operators.md#a-brfa-trial)).
+  The bot was approved on 17 October 2026, and has the bot flag.
+- **Running.** The bot runs four times a day on Toolforge, with `--live`,
+  and `User:ParamBot/Run` says `yes`.
 - **On the wiki.** The bot's pages are set up: `User:ParamBot/Rules` is
   template-editor protected and lists the approved rules pages, and the
   documentation, FAQ, instructions and talk page are in place.

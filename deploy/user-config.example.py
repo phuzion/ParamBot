@@ -7,7 +7,9 @@ usernames['wikipedia']['en'] = 'ParamBot'
 # user-password.py contains one line:
 #   ('ParamBot', BotPassword('parambot', '<password from Special:BotPasswords>'))
 # Give the bot password the "High-volume (bot) access" grant (the bot refuses
-# to run live without the bot right) and "Edit existing pages".
+# to run live without the bot right), "Edit existing pages", and "Edit
+# protected pages" (without it, extended-confirmed protected articles are
+# skipped as "page is protected").
 password_file = 'user-password.py'
 
 put_throttle = 10   # seconds between edits

@@ -2,12 +2,11 @@
 # Assumes the repo is checked out at ~/parambot with a venv at ~/parambot/venv,
 # and user-config.py / user-password.py (and parambot.toml, for any settings) in ~/parambot.
 - name: parambot
-  # The BRFA trial: --live --trial edits without the bot flag, up to [trial]
-  # edits in parambot.toml, then only reports. After the trial, go back to
-  # --report-only, with User:ParamBot/Run saying "report", until the BRFA is
-  # approved; then use --live, with the Run page saying "yes". (Or drop the
-  # mode options and set mode in parambot.toml: the command line wins over it.)
-  command: cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --live --trial --max-hours 5
+  # Approved on 17 October 2026, so --live, with User:ParamBot/Run saying
+  # "yes". --report-only instead saves only the report; --live --trial is for a
+  # BRFA trial (see docs/operators.md). (Or drop the mode options and set mode
+  # in parambot.toml: the command line wins over it.)
+  command: cd $HOME/parambot && PYWIKIBOT_DIR=$HOME/parambot ./venv/bin/python -m parambot run --live --max-hours 5
   image: python3.13
   # Every six hours: 01:23, 07:23, 13:23 and 19:23 UTC. Toolforge's macros jump
   # from @hourly to @daily, so the times are fixed here, off the hour, when

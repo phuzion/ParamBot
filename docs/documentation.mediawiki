@@ -15,7 +15,7 @@
 | [[User:Phuzion|Phuzion]], [[User:Zackmann08|Zackmann08]]
 |-
 ! Status
-| Not yet approved. It makes no edits except trial edits approved at [[WP:BRFA|Bots/Requests for approval]].
+| [[Wikipedia:Bots/Requests for approval/ParamBot|Approved]] on 17 October 2026, after a 100-edit trial ([[User:ParamBot/BRFA Log|log]])
 |-
 ! Task
 | Rename deprecated template parameters that have come back into articles
@@ -125,7 +125,7 @@ It keeps the article's formatting, including lined-up <code>=</code> signs, and 
 
 == How a run works ==
 Four times a day, ParamBot:
-# '''Checks it's allowed to run.''' [[User:ParamBot/Run]] must say <code>yes</code>, and the bot must be logged in to its own account, with the bot flag except during a trial approved at [[WP:BRFA|Bots/Requests for approval]]. Until it's approved, it runs ''reporting only'': it works out every fix, but saves nothing except [[User:ParamBot/Report]], as the bot policy allows a bot to edit its own userspace without approval. [[User:ParamBot/Run]] can then say <code>report</code>.
+# '''Checks it's allowed to run.''' [[User:ParamBot/Run]] must say <code>yes</code>, and the bot must be logged in to its own account, with the bot flag. The operators can also run it ''reporting only'': it works out every fix, but saves nothing except [[User:ParamBot/Report]]. [[User:ParamBot/Run]] can then say <code>report</code>.
 # '''Checks its own pages.''' [[User:ParamBot]] must name its operators with {{tl|bot}}, [[User:ParamBot/Rules]] must be template-editor protected, and the report page must exist and be editable. If anything is wrong, it doesn't run at all.
 # '''Reads the rules.''' It reads the approved revision of every rules page listed on [[User:ParamBot/Rules]] ([[#The rules|see below]]).
 # '''Checks every template the rules are for.''' It reads the template's list of accepted parameters, from its <code><nowiki>{{#invoke:Check for unknown parameters|check|...}}</nowiki></code> call, and finds its redirects and the category it puts articles with unknown parameters in. A wrapper template, such as {{tl|Infobox military person}}, has no list of its own: it passes its parameters on to another template through [[Module:Template wrapper]], so the bot uses that template's list, plus the names the wrapper keeps for itself. A template without a list has its rules switched off, since the bot can't tell which names are safe.
