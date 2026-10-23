@@ -11,14 +11,16 @@ Inactive rule sets are checked the same way; the caller decides not to use
 them.
 """
 
+import itertools
 import logging
-from collections.abc import Iterable
+import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
 from . import messages as msg
 from .fixer import TemplateRules
 from .report import Report
-from .rules import RuleSet
+from .rules import NUMBER, REAL_HASH_ENTITY, RuleSet
 from .templatescan import (
     UNKNOWN_CHECK_MODULE,
     KnownParams,
@@ -126,6 +128,7 @@ def _check(found: _Found, categories: list[str] | None, report: Report,
     # Rules for names the template still accepts wait for it to drop them,
     # unless only a setting like mapframe_args=y makes the check accept them.
     waiting: list[str] = []
+    waiting_rules = 0
     not_needed: dict[str, list[str]] = {}   # {setting: names}
     for name in (*ruleset.renames, *ruleset.removes):
         if name in known:
@@ -134,14 +137,87 @@ def _check(found: _Found, categories: list[str] | None, report: Report,
                 not_needed.setdefault(setting, []).append(name)
             else:
                 waiting.append(name)
+                waiting_rules += 1
+    # A "#" rule waits for each name it covers that the template still
+    # accepts, such as nationalcaps1 to nationalcaps7 for nationalcaps#.
+    # Names with an exact rule of their own are that rule's.
+    # Names the template accepts through its own patterns, such as
+    # national_?years[1-9], can't be listed, so the numbers a rule's "#" can
+    # stand for are tried as well.
+    listed = known.listed() if ruleset.patterns else set()
+    waiting_shown: list[str | tuple[str, str]] = list(waiting)
+    for rule in ruleset.patterns:
+        assert rule.pattern is not None
+        candidates = {name for name in listed if rule.pattern.fullmatch(name)}
+        candidates |= set(_numbered(rule.old))
+        covered = sorted((name for name in candidates if name in known
+                          and name not in ruleset.renames and name not in ruleset.removes
+                          and not known.added_by(name)), key=_natural)
+        if covered:
+            waiting += covered
+            waiting_shown += _runs(covered)
+            waiting_rules += 1
     if waiting:
-        report.notes.append(msg.rules_waiting(template, waiting))
+        from_patterns = len(waiting) != waiting_rules
+        report.notes.append(msg.rules_waiting(template, waiting_shown,
+                                              waiting_rules if from_patterns else None))
     for setting, names in not_needed.items():
         report.notes.append(msg.rules_not_needed(template, names, setting))
     for rule in ruleset.renames.values():
         if rule.new is not None and rule.new not in known:
             report.problems.append(msg.target_not_accepted(template, rule.old, rule.new))
     return TemplateRules(ruleset, frozenset(found.names), known)
+
+
+def _natural(name: str) -> list[str | int]:
+    """A sort key that puts nationalcaps2 before nationalcaps10."""
+    return [int(part) if part.isdigit() else part for part in re.split(r'(\d+)', name)]
+
+
+# The numbers to try for a rule's "#", so that a name accepted by one of the
+# template's patterns is found: none, then 1 up to this, fewer for two or more.
+_TRY_NUMBERS = {1: 100, 2: 30}
+_TRY_NUMBERS_MORE = 9
+
+
+def _numbered(old: str) -> Iterator[str]:
+    """The names a "#" rule's old name, as written, stands for, with the
+    numbers in _TRY_NUMBERS: nationalyears#: nationalyears, nationalyears1 ..."""
+    # The entity for a real "#" has a "#" in it, so it's put aside first.
+    parts = [part.replace('\0', '#')
+             for part in old.replace(REAL_HASH_ENTITY, '\0').split(NUMBER)]
+    highest = _TRY_NUMBERS.get(len(parts) - 1, _TRY_NUMBERS_MORE)
+    numbers = ['', *map(str, range(1, highest + 1))]
+    for chosen in itertools.product(numbers, repeat=len(parts) - 1):
+        yield parts[0] + ''.join(n + part for n, part in zip(chosen, parts[1:], strict=True))
+
+
+def _runs(names: list[str]) -> list[str | tuple[str, str]]:
+    """names, in order, with each run of consecutive numbers as (first,
+    last): nationalyears1 ... nationalyears7 as ("nationalyears1",
+    "nationalyears7")."""
+    out: list[str | tuple[str, str]] = []
+    run: list[tuple[str, int, str, str]] = []   # (before, number, after, name)
+
+    def close() -> None:
+        if len(run) > 2:
+            out.append((run[0][3], run[-1][3]))
+        else:
+            out.extend(name for *_, name in run)
+        run.clear()
+    for name in names:
+        m = re.fullmatch(r'(\D*)(\d+)(\D*)', name)
+        if m is None:
+            close()
+            out.append(name)
+            continue
+        before, number, after = m.group(1), int(m.group(2)), m.group(3)
+        if run and not (run[-1][0] == before and run[-1][2] == after
+                        and run[-1][1] + 1 == number):
+            close()
+        run.append((before, number, after, name))
+    close()
+    return out
 
 
 def module_map_params(wiki: Wiki) -> dict[str, frozenset[str]] | None:

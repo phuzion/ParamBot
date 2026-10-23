@@ -378,15 +378,26 @@ def unusual_category(template: str, default: str, actual: str, has_table: bool) 
             f'usual {default}, so its rules will never find anything. {fix}')
 
 
-def rules_waiting(template: str, names: list[str]) -> str:
-    listed = _and([para(name) for name in names])
-    if len(names) == 1:
-        return (f'{template}: 1 rule waits because the template still accepts its old name, '
-                f'{listed}. That is normal: the rule starts working once the template drops '
-                'that name. If the rule is backwards, swap its names.')
-    return (f'{template}: {len(names)} rules wait because the template still accepts their old '
-            f'names, {listed}. That is normal: they start working once the template drops '
-            'those names. If a rule is backwards, swap its names.')
+def rules_waiting(template: str, names: Sequence[str | tuple[str, str]],
+                  rules: int | None = None) -> str:
+    """names: the old names the template still accepts, with a run of
+    numbered ones as (first, last).  rules: how many rules they're from, if
+    any is a "#" rule, which covers several names; None if each is a rule."""
+    listed = _and([para(name) if isinstance(name, str)
+                   else f'{para(name[0])} to {para(name[1])}' for name in names])
+    covers = rules is not None
+    rules = len(names) if rules is None else rules
+    one_name = len(names) == 1 and isinstance(names[0], str) and not covers
+    if rules == 1:
+        which = f'its old name, {listed}' if one_name else f'old names it covers, {listed}'
+        return (f'{template}: 1 rule waits because the template still accepts {which}. That is '
+                f'normal: the rule starts working once the template drops '
+                f'{"that name" if one_name else "those names"}. If the rule is '
+                'backwards, swap its names.')
+    which = f'old names they cover, {listed}' if covers else f'their old names, {listed}'
+    return (f'{template}: {rules} rules wait because the template still accepts {which}. That '
+            'is normal: they start working once the template drops those names. If a rule is '
+            'backwards, swap its names.')
 
 
 UNKNOWN_CHECK = 'Module:Check for unknown parameters'

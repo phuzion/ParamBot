@@ -319,3 +319,17 @@ def test_scaffold_writes_a_real_hash_as_an_entity():
     assert config.problems == []
     rs = config.rulesets['Infobox reactor']
     assert rs.renames['#_of_staff'].new == 'num_staff' and set(rs.removes) == {'#_old'}
+
+
+def test_the_names_a_template_lists():
+    known = known_params(TEMPLATE, MAP_NAMES)
+    assert {'image_size', 'type', 'name', 'mapframe-zoom'} <= known.listed()
+    assert not any(name.startswith('custom_label') for name in known.listed())   # a pattern
+
+
+def test_the_names_a_wrapper_lists():
+    known = WrappedParams(wrapper_call(WRAPPER), known_params(WRAPPED))
+    listed = known.listed()
+    # What it keeps, its aliases, and the wrapped template's names it passes on.
+    assert {'service_years', 'battles', 'known_for', 'other_name', 'birth_name'} <= listed
+    assert all(name in known for name in listed)

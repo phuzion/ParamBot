@@ -84,6 +84,11 @@ class KnownParams:
         does."""
         return None if self._listed(name) else self.extras.get(name)
 
+    def listed(self) -> set[str]:
+        """The names the template accepts that can be listed: not those its
+        patterns (regexp1 and so on) accept, which could be any number."""
+        return self.names | set(self.extras)
+
     def _listed(self, name: str) -> bool:
         return name in self.names or any(p.fullmatch(name) for p in self.patterns)
 
@@ -167,6 +172,14 @@ class WrappedParams(KnownParams):
     def added_by(self, name: str) -> str | None:
         passed = self.wrapper.passes(name)
         return None if passed is None else self.inner.added_by(passed)
+
+    def listed(self) -> set[str]:
+        # The names the wrapper keeps or renames, and the wrapped template's,
+        # each kept only if an article may use it through the wrapper.
+        wrapper = self.wrapper
+        candidates = (set(wrapper.keeps) | set(wrapper.sometimes_keeps) | self.inner.listed()
+                      | {name for name in wrapper.aliases if '#' not in name})
+        return {name for name in candidates if name in self}
 
     def _passed_on(self, name: str) -> str | None:
         passed = self.wrapper.passes(name)

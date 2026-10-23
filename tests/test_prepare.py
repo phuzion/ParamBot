@@ -8,7 +8,7 @@ from fakes import OFFICEHOLDER_SOURCE, UNKNOWN_CHECK_SOURCE, FakePage, FakeWiki
 from parambot import messages as msg
 from parambot.fixer import fix_wikitext
 from parambot.messages import plain
-from parambot.prepare import category_problem, prepare, template_categories
+from parambot.prepare import _numbered, _runs, category_problem, prepare, template_categories
 from parambot.report import Report
 from parambot.rules import parse_config
 from parambot.templatescan import UNKNOWN_CHECK_MODULE, KnownParams
@@ -420,3 +420,59 @@ def test_a_name_with_a_real_hash_is_fixed_in_articles():
     result = fix_wikitext('{{Infobox reactor\n| #_of_staff = 50\n| #_of_operators = 2\n}}',
                           prepared.ready)
     assert result.text == '{{Infobox reactor\n| num_staff = 50\n| num_operators = 2\n}}'
+
+
+# -- "#" rules that wait ---------------------------------------------------
+
+NUMBERED_SOURCE = (
+    '{{#invoke:Check for unknown parameters|check|unknown=[[Category:Pages using infobox '
+    'officeholder with unknown parameters|_VALUE_]]| name | caps10 | caps11 | goals1 '
+    '| regexp1 = caps[1-9] | regexp2 = national_?years[1-7] | regexp3 = national_years[8-9] }}')
+
+
+def test_a_number_rule_waits_for_each_name_the_template_still_accepts():
+    # Infobox football biography still accepted nationalyears1 to 7 through
+    # its patterns, and caps1 to 11 through its list and patterns.
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, NUMBERED_SOURCE), MODULE)
+    _, report = run_prepare(wiki, officeholder(
+        ('nationalyears#', 'national_years#'), ('caps#', 'national_caps#'),
+        ('goals#', 'name#')))
+    assert [plain(note) for note in report.notes] == [
+        'Infobox officeholder: 3 rules wait because the template still accepts old names they '
+        'cover, "nationalyears1" to "nationalyears7", "caps1" to "caps11" and "goals1". That '
+        'is normal: they start working once the template drops those names. If a rule is '
+        'backwards, swap its names.']
+
+
+def test_names_with_an_exact_rule_are_that_rules():
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, NUMBERED_SOURCE), MODULE)
+    _, report = run_prepare(wiki, officeholder(('goals#', 'name#'), ('goals1', 'name')))
+    # goals1 is the exact rule's, so it's listed once, for that rule.
+    assert [plain(note) for note in report.notes] == [
+        'Infobox officeholder: 1 rule waits because the template still accepts its old name, '
+        '"goals1". That is normal: the rule starts working once the template drops that '
+        'name. If the rule is backwards, swap its names.']
+
+
+def test_a_number_rule_for_names_the_template_has_dropped_doesnt_wait():
+    wiki = FakeWiki(FakePage(OFFICEHOLDER, NUMBERED_SOURCE), MODULE)
+    _, report = run_prepare(wiki, officeholder(('termstart#', 'name#')))
+    assert report.notes == []
+
+
+@pytest.mark.parametrize('names, runs', [
+    (['a1', 'a2', 'a3', 'a5'], [('a1', 'a3'), 'a5']),
+    (['a1', 'a2'], ['a1', 'a2']),                        # too short for "to"
+    (['x', 'a1', 'a2', 'a3', 'b4'], ['x', ('a1', 'a3'), 'b4']),
+    (['a1_b', 'a2_b', 'a3_b'], [('a1_b', 'a3_b')]),
+    (['a1b2', 'a1b3', 'a1b4'], ['a1b2', 'a1b3', 'a1b4']),   # two numbers: as they are
+])
+def test_runs_of_numbered_names(names, runs):
+    assert _runs(names) == runs
+
+
+def test_the_numbers_a_rule_stands_for():
+    names = list(_numbered('caps#'))
+    assert names[:3] == ['caps', 'caps1', 'caps2'] and names[-1] == 'caps100'
+    assert len(list(_numbered('a#_b#'))) == 31 * 31
+    assert '#_of_unit2' in _numbered('&#35;_of_unit#')
