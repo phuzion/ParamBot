@@ -14,6 +14,7 @@ is your Toolforge shell name.
 |---|---|
 | [User:ParamBot/Run](https://en.wikipedia.org/wiki/User:ParamBot/Run) | The off switch: `yes` to run, `report` to update only the report, anything else to stop. |
 | [User:ParamBot/Report](https://en.wikipedia.org/wiki/User:ParamBot/Report) | What the last run found: pages needing review, pages it skipped, and problems with the rules. |
+| [User:ParamBot/ReportHistory](https://en.wikipedia.org/wiki/User:ParamBot/ReportHistory) | A line for every live or report-only run, newest first: when it ran, what it did, and how it ended, including runs aborted by the Run page. |
 | [User:ParamBot/Rules](https://en.wikipedia.org/wiki/User:ParamBot/Rules) | The approved rules pages, with the revision of each to use. Template-editor protected. |
 | [Special:Contributions/ParamBot](https://en.wikipedia.org/wiki/Special:Contributions/ParamBot) | Its edits. |
 | [The BRFA](https://en.wikipedia.org/wiki/Wikipedia:Bots/Requests_for_approval/ParamBot) | The approval request. |
@@ -64,7 +65,10 @@ Each run:
 5. saves User:ParamBot/Report, every run. Its first line says when the run
    started and ended and how long it took, and its last line names the
    commit, such as `<!-- ParamBot 3457b05 -->`. So the report's history is a
-   log of the runs.
+   log of the runs;
+6. adds a line to the top of User:ParamBot/ReportHistory, however the run
+   ended: finished, finished early (and why), stopped by an error, or aborted
+   because someone changed User:ParamBot/Run (with when, and by whom).
 
 A run stops starting new work after 5 hours (the job's `--max-hours 5`), so
 it can't still be going when the next one starts, 6 hours later. If you change
@@ -102,7 +106,8 @@ tail -n 40 ~/parambot.err        # the log of the latest run
 tail -n 3 ~/parambot.out         # one line per run: "Last run: ... 3 edits. Rules: ..."
 ```
 
-Or look at User:ParamBot/Report and its history.
+Or look at User:ParamBot/ReportHistory, a line per run, and
+User:ParamBot/Report.
 
 ### What would it have edited?
 

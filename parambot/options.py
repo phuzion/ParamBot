@@ -17,6 +17,7 @@ class Options:
     rules_page: str = ''
     report_page: str = ''
     run_page: str = ''
+    history_page: str = ''          # a line for each run that saves the report
     instructions_page: str = ''     # default: <rules_page>/Instructions
     faq_page: str = ''              # every edit summary links to it
     header_page: str = ''           # the links across the top of the bot's pages and the report
@@ -62,6 +63,7 @@ class Options:
         self.rules_page = self.rules_page or f'{base}/Rules'
         self.report_page = self.report_page or f'{base}/Report'
         self.run_page = self.run_page or f'{base}/Run'
+        self.history_page = self.history_page or f'{base}/ReportHistory'
         self.instructions_page = self.instructions_page or f'{self.rules_page}/Instructions'
         self.faq_page = self.faq_page or f'{base}/FAQ'
         self.header_page = self.header_page or f'{base}/Header'
@@ -99,6 +101,7 @@ class Options:
             self.user_page: "the bot's user page",
             self.rules_page: 'the rules page',
             self.run_page: 'the Run page',
+            self.history_page: 'the report history',
             self.instructions_page: 'the instructions for rule writers',
             self.faq_page: 'the FAQ',
             self.header_page: 'the header',

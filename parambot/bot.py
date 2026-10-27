@@ -14,6 +14,7 @@ from . import commit
 from . import messages as msg
 from .botpages import check_bot_pages
 from .fixer import FixResult, TemplateRules, fix_wikitext
+from .history import history_row, updated_page
 from .options import Options
 from .prepare import Prepared, prepare
 from .report import Links, Report
@@ -37,6 +38,10 @@ def _now() -> datetime:
 
 class StopRun(Exception):
     """The bot mustn't run, or must stop: the message says why."""
+
+
+class RunPageOff(StopRun):
+    """The Run page doesn't say to run: someone has switched the bot off."""
 
 
 # The wiki's error codes for a save that fails in a way every other save in
@@ -70,6 +75,10 @@ class ParamBot:
         self._started = _clock()
         self._trial_made: int | None = None   # edits made in a BRFA trial, if there is one
         self._trial_log: list[str] = []       # this run's trial edits, for the trial's log
+        self._history = False                 # whether the run gets a line on the history page
+        self._switched_off: RunPageOff | None = None   # the Run page stopped the run
+        self._ended_early: str | None = None  # why the run stopped before the last page
+        self._report_revision: int | None = None   # the revision of the report it saved
 
     # -- a run -------------------------------------------------------------
 
@@ -78,31 +87,53 @@ class ParamBot:
         self.report.started = _now()
         self._start_trial()
         self._preflight()
+        # From here on, a run that saves the report adds a line to the
+        # history page, however it ends.
+        self._history = self.options.saves_report
         try:
             self._run()
         except StopRun as stop:
-            # Someone switched the bot off, or it can't start: make no more
-            # wiki edits, not even the report or the trial's log.
+            # Someone switched the bot off, or it can't go on: make no more
+            # wiki edits, not even the report or the trial's log.  Only the
+            # line on the history page, in the bot's own userspace, which
+            # says why the run stopped.
             self.report.errors.append(msg.stopped_early(stop))
             if self._trial_log:
                 log.warning('%s', msg.plain(msg.trial_log_not_saved(
                     self.options.trial_log_page, len(self._trial_log), self._trial_log_file)))
             self._write_report(local_only=True)
+            if isinstance(stop, RunPageOff):
+                self._write_history('aborted by the Run page', self._switched_off_result(stop))
+            else:
+                self._write_history('stopped', 'stopped: ' + self.report.links.wikitext(str(stop)))
             raise
         except CannotEdit as stop:
             log.error('%s', msg.plain(str(stop)))
             self.report.errors.append(str(stop))
             self._write_trial_log()
             self._write_report()
+            self._write_history('stopped by an error',
+                                'error: ' + self.report.links.wikitext(str(stop)))
             raise
         except Exception as error:
             log.exception('Run failed')
             self.report.errors.append(msg.run_failed(error))
             self._write_trial_log()
             self._write_report()
+            self._write_history('stopped by an error',
+                                'error: ' + self.report.links.wikitext(msg.run_failed(error)))
             raise
         self._write_trial_log()
         self._write_report()
+        if self._switched_off is not None:
+            # Reporting only, and switched off before the report was saved.
+            self._write_history('aborted by the Run page',
+                                self._switched_off_result(self._switched_off))
+        elif self._ended_early:
+            self._write_history('finished early', 'finished early: '
+                                + self.report.links.wikitext(self._ended_early))
+        else:
+            self._write_history('finished', 'finished')
         return self.report
 
     def check_rules(self) -> Report:
@@ -202,8 +233,8 @@ class ParamBot:
         title = normalize_title(options.trial_log_page)
         others = {normalize_title(t) for t in (
             options.user_page, options.rules_page, options.run_page, options.report_page,
-            options.instructions_page, options.faq_page, options.header_page,
-            options.link_rule_page)}
+            options.history_page, options.instructions_page, options.faq_page,
+            options.header_page, options.link_rule_page)}
         if (not self._in_own_userspace(title) or title in others
                 or title.startswith(normalize_title(options.rules_page) + '/')):
             raise StopRun(msg.trial_log_elsewhere(options.trial_log_page, options.user_page))
@@ -219,6 +250,7 @@ class ParamBot:
             self._check_trial_log_page()
         if options.saves_report:
             self._check_report_page()
+            self._check_history_page()
             self._check_account()
             self._check_run_page()
         problems = self._check_pages()
@@ -279,6 +311,20 @@ class ParamBot:
         if options.report_only and not self._in_own_userspace(report):
             raise StopRun(msg.report_only_elsewhere(options.report_page, options.user_page))
 
+    def _check_history_page(self) -> None:
+        """The history page is saved on every run that saves the report, even
+        a report-only one, so it must be the bot's own page, and not one of its
+        others."""
+        options = self.options
+        title = normalize_title(options.history_page)
+        others = {normalize_title(t) for t in (
+            options.user_page, options.rules_page, options.run_page, options.report_page,
+            options.instructions_page, options.faq_page, options.header_page,
+            options.link_rule_page, options.trial_log_page)}
+        if (not self._in_own_userspace(title) or title in others
+                or title.startswith(normalize_title(options.rules_page) + '/')):
+            raise StopRun(msg.history_elsewhere(options.history_page, options.user_page))
+
     def _in_own_userspace(self, title: str) -> bool:
         return normalize_title(title).startswith(normalize_title(self.options.user_page) + '/')
 
@@ -299,18 +345,19 @@ class ParamBot:
         text = strip_comments(page.text if page.exists() else '').strip().lower()
         allowed = RUN_VALUES | REPORT_VALUES if self.options.report_only else RUN_VALUES
         if text not in allowed:
-            raise StopRun(msg.run_page_off(self.options.run_page, before,
+            raise RunPageOff(msg.run_page_off(self.options.run_page, before,
                                            self.options.report_only))
 
     def _check_may_save(self, title: str) -> None:
         """The last check before anything is saved.  Reporting only, nothing
-        but the report page in the bot's own userspace, whatever else the run
-        was told."""
+        but the report and history pages in the bot's own userspace, whatever
+        else the run was told."""
         options = self.options
+        allowed = {normalize_title(options.report_page), normalize_title(options.history_page)}
         if options.report_only and (
-                normalize_title(title) != normalize_title(options.report_page)
-                or not self._in_own_userspace(title)):
-            raise RuntimeError(msg.report_only_refused_save(title, options.report_page))
+                normalize_title(title) not in allowed or not self._in_own_userspace(title)):
+            raise RuntimeError(msg.report_only_refused_save(title, options.report_page,
+                                                            options.history_page))
 
     def _check_pages(self) -> list[str]:
         """Problems with the bot's own pages; notes go straight on the report."""
@@ -397,13 +444,13 @@ class ParamBot:
         failures = 0
         for page in pages:
             if self._trial_full():
-                self.report.notes.append(msg.stopped_at_trial_limit(self.options.trial_edits))
+                self._end_early(msg.stopped_at_trial_limit(self.options.trial_edits))
                 break
             if self.options.max_edits and self.report.edits >= self.options.max_edits:
-                self.report.notes.append(msg.stopped_at_max_edits(self.options.max_edits))
+                self._end_early(msg.stopped_at_max_edits(self.options.max_edits))
                 break
             if self._out_of_time():
-                self.report.notes.append(msg.stopped_at_max_hours(self.options.max_hours or 0))
+                self._end_early(msg.stopped_at_max_hours(self.options.max_hours or 0))
                 break
             candidate = candidates.get(page.title())
             if candidate is None:
@@ -421,6 +468,10 @@ class ParamBot:
                     raise RuntimeError(msg.too_many_failures(failures, error)) from error
             else:
                 failures = 0
+
+    def _end_early(self, why: str) -> None:
+        self.report.notes.append(why)
+        self._ended_early = why
 
     def _process(self, page: WikiPage, targets: list[TemplateRules]) -> None:
         title = page.title()
@@ -554,6 +605,8 @@ class ParamBot:
                 saved = True
             except StopRun as stop:
                 log.warning('Not saving %s: %s', options.report_page, msg.plain(str(stop)))
+                if isinstance(stop, RunPageOff):
+                    self._switched_off = stop
             except Exception:
                 log.exception('Could not save %s; writing the report locally instead',
                               options.report_page)
@@ -583,6 +636,54 @@ class ParamBot:
         page.save(summary=msg.report_summary(self.report.edits, len(self.report.issues),
                                              self.options.report_only),
                   minor=True, bot=self.wiki.has_right('bot'), quiet=True, nocreate=True)
+        self._report_revision = page.latest_revision_id
+
+    # -- the report history ------------------------------------------------
+
+    def _write_history(self, status: str, result: str) -> None:
+        """Add a line for this run to the top of the history page, saying how
+        it ended: result, as wikitext, and status, in a few words for the
+        edit summary.  Only for runs that save the report, once they've
+        started.  Never raises: the history is only a record."""
+        if not self._history:
+            return
+        options, report = self.options, self.report
+        if self._report_revision:
+            result += f' ([[Special:Permalink/{self._report_revision}|report]])'
+        mode = 'reporting only' if options.report_only else (
+            'live (BRFA trial)' if options.in_trial else 'live')
+        assert report.started is not None and report.ended is not None
+        row = history_row(
+            started=report.started, ended=report.ended, mode=mode,
+            categories=f'{report.categories_populated} of {report.categories_polled}',
+            checked=report.pages_checked, edits=report.edits,
+            needing_review=len({title for title, _ in report.issues}), result=result)
+        intro = msg.history_intro(options.bot_user, options.report_page, options.run_page)
+        try:
+            self._check_may_save(options.history_page)
+            page = self.wiki.page(options.history_page)
+            old = page.text if page.exists() else None
+            page.text = updated_page(old, row, header=options.header_page, intro=intro)
+            # Created if need be: it's in the bot's own userspace (see
+            # _check_history_page).
+            page.save(summary=msg.history_summary(status), minor=True,
+                      bot=self.wiki.has_right('bot'), quiet=True)
+        except Exception:
+            log.exception('Could not add this run to %s', options.history_page)
+        else:
+            log.info('Added this run to %s', options.history_page)
+
+    def _switched_off_result(self, stop: RunPageOff) -> str:
+        """How a run someone stopped with the Run page ended: when the page
+        was changed, and by whom, from its newest revision."""
+        try:
+            change = self.wiki.last_change(self.options.run_page)
+        except Exception as error:
+            log.warning('Could not read when %s was changed: %s', self.options.run_page, error)
+            change = None
+        when, user = change or (None, None)
+        return (msg.run_page_changed(self.options.run_page, when, user) + ': '
+                + self.report.links.wikitext(str(stop)))
 
 
 def trial_log_line(revid: int | None, title: str, when: datetime) -> str:

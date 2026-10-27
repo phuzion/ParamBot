@@ -27,6 +27,10 @@
 # if it's a subpage of User:<bot>.
 # report = "User:ParamBot/Report"
 # run = "User:ParamBot/Run"
+# Live and report-only runs add a line here for each run, newest first: when
+# it ran, what it did, and how it ended, including when the Run page stopped
+# it. It must be a subpage of User:<bot>; the bot creates it if need be.
+# history = "User:ParamBot/ReportHistory"
 # The default is the rules page's /Instructions subpage.
 # instructions = "User:ParamBot/Rules/Instructions"
 # Every edit summary links to the FAQ.

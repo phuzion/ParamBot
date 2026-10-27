@@ -127,6 +127,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument('--report-page',
                      help='default: [pages] report, else User:<bot-user>/Report')
     run.add_argument('--run-page', help='default: [pages] run, else User:<bot-user>/Run')
+    run.add_argument('--history-page',
+                     help='where live and report-only runs add a line for each run (default: '
+                          '[pages] history, else User:<bot-user>/ReportHistory)')
     run.add_argument('--out-dir',
                      help="where dry runs (and live runs that can't save the report) write "
                           'files (default: [output] dir, else out)')
@@ -175,7 +178,7 @@ def _options(args: argparse.Namespace, settings: Settings | None = None,
                       templates=tuple(args.template), pages=tuple(args.page),
                       any_namespace=args.any_namespace)
         for name in ('max_edits', 'max_hours', 'cooldown_days', 'report_page', 'run_page',
-                     'out_dir'):
+                     'history_page', 'out_dir'):
             if getattr(args, name) is not None:
                 values[name] = getattr(args, name)
     return Options(**values)

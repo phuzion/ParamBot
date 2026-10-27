@@ -139,6 +139,7 @@ class FakePage:
             raise self._save_error
         if nocreate and (self._deleted_before_save or not self._exists):
             raise pwb_exc.NoCreateError(0)   # MediaWiki's "missingtitle"
+        self._exists = True   # created, if it wasn't there
         self.text = self.text.rstrip()   # as MediaWiki saves it
         self.saved.append(self.text)
         self.summaries.append(summary)
@@ -191,7 +192,8 @@ class FakeWiki:
     def page(self, title, ns=0):
         if ns == 10 and not title.startswith('Template:'):
             title = 'Template:' + title
-        return self.pages.get(title) or FakePage(title, exists=False)
+        # Kept, so that a page the bot creates is there afterwards.
+        return self.pages.setdefault(title, FakePage(title, exists=False))
 
     def load(self, pages, *, templates=False):
         pages = list(pages)
@@ -214,6 +216,13 @@ class FakeWiki:
                     found[revid] = Revision(revid, page.title(), text, page.content_model,
                                             page.latest_revision_id)
         return found
+
+    def last_change(self, title):
+        page = self.pages.get(title)
+        if page is None or not page._exists or not page._revisions:
+            return None
+        revision = max(page._revisions, key=lambda r: r.timestamp)
+        return revision.timestamp, revision.user
 
     def subpages(self, title):
         self.requests['subpages'] += 1

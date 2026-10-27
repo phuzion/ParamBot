@@ -688,8 +688,9 @@ def report_only_elsewhere(report_page: str, user_page: str) -> str:
             f'to {report_page}. Make the report page a subpage of {user_page}.')
 
 
-def report_only_refused_save(title: str, report_page: str) -> str:
-    return f'Reporting only: refused to save {title}. The only page it may edit is {report_page}.'
+def report_only_refused_save(title: str, report_page: str, history_page: str) -> str:
+    return (f'Reporting only: refused to save {title}. The only pages it may edit are '
+            f'{report_page} and {history_page}.')
 
 
 def report_page_taken(title: str, what: str) -> str:
@@ -708,3 +709,30 @@ def stopped_early(reason: object) -> str:
 def run_failed(error: Exception) -> str:
     return (f'The run stopped early because of an error: {type(error).__name__}: '
             f'{quoted(error)}')
+
+
+# -- the report history ----------------------------------------------------
+
+def history_intro(bot_user: str, report_page: str, run_page: str) -> str:
+    return (f"Every run of [[User:{bot_user}|{bot_user}]] that saved anything, newest first: "
+            'when it ran, what it did and how it ended. The bot adds a line at the end of '
+            f'each live or report-only run. What the latest run found is on [[{report_page}]]; '
+            f'a run stopped by changing [[{run_page}]] says so here.')
+
+
+def history_summary(result: str) -> str:
+    return f'Adding a line for this run: {result}'
+
+
+def history_elsewhere(page: str, user_page: str) -> str:
+    return (f'{page}, the report history, must be a page of its own in {user_page}\'s '
+            'userspace, since the bot edits it on every run. Change '
+            f'{code("[pages] history")} in the settings.')
+
+
+def run_page_changed(run_page: str, when: datetime | None, user: str | None) -> str:
+    """How a run that someone stopped with the Run page ended, for the
+    report history: wikitext."""
+    at = f' at {when:%Y-%m-%d %H:%M}' if when else ''
+    by = f' by [[User:{user}|{user}]]' if user else ''
+    return f"aborted: [[{run_page}]] was changed{at}{by}, so the run stopped"

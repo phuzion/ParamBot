@@ -127,6 +127,15 @@ class Wiki:
                         page['lastrevid'])
         return found
 
+    def last_change(self, title: str) -> tuple[datetime, str] | None:
+        """When the page was last edited, and by whom; None if it doesn't
+        exist.  Fetched afresh."""
+        page = pywikibot.Page(self.site, title)
+        if not page.exists():
+            return None
+        revision = page.latest_revision
+        return revision.timestamp, str(revision.user)
+
     def subpages(self, title: str) -> list[str]:
         """The titles of the pages under title/, without redirects: a
         request for each 500 of them (5,000 with the bot right)."""
