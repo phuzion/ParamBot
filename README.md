@@ -164,7 +164,7 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   the next one starts. What's left is picked up by the next run.
 - **Gentle on the API.** Every read waits at least a second after the last
   one (`read_delay`), so the bot can't make more than 3,600 an hour, and edits
-  are at least 10 seconds apart (Pywikibot's `put_throttle`). Nothing is asked once per
+  are at least 5 seconds apart (Pywikibot's `put_throttle`). Nothing is asked once per
   article or per template: pages, their templates, redirects, categories and
   expansions go 50 to a request, and the cooldown comes from one look at the
   bot's own recent edits. A run needs about 25 reads, plus about one for each
