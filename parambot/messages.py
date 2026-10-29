@@ -714,10 +714,11 @@ def run_failed(error: Exception) -> str:
 # -- the report history ----------------------------------------------------
 
 def history_intro(bot_user: str, report_page: str, run_page: str) -> str:
-    return (f"Every run of [[User:{bot_user}|{bot_user}]] that saved anything, newest first: "
-            'when it ran, what it did and how it ended. The bot adds a line at the end of '
-            f'each live or report-only run. What the latest run found is on [[{report_page}]]; '
-            f'a run stopped by changing [[{run_page}]] says so here.')
+    return (f'A line for every run of [[User:{bot_user}|{bot_user}]], newest first, except runs '
+            f"that didn't start because [[{run_page}]] was off: when it ran, what it did and how "
+            'it ended. The bot adds a line at the end of each live or report-only run, however '
+            f'it ends. What the latest run found is on [[{report_page}]]; a run stopped by '
+            f'changing [[{run_page}]] says so here.')
 
 
 def history_summary(result: str) -> str:

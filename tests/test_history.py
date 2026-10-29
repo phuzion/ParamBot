@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from parambot.history import MARKER, MAX_ROWS, duration, history_row, updated_page
+from parambot.history import MARKER, MAX_ROWS, history_row, updated_page
 
 STARTED = datetime(2026, 10, 27, 4, 0, tzinfo=UTC)
 
@@ -16,7 +16,7 @@ def row(result='finished', minutes=12):
 
 
 def test_a_row_is_one_line_of_the_table():
-    assert row() == ('|-\n| 2026-10-27 04:00 || 2026-10-27 04:12 || 12 min || live || 3 of 41 '
+    assert row() == ('|-\n| 2026-10-27 04:00 || 2026-10-27 04:12 || 12 minutes || live || 3 of 41 '
                      '|| 57 || 52 || 2 || finished\n')
 
 
@@ -45,8 +45,8 @@ def test_the_oldest_rows_go():
     assert 'run 4\n' not in text and 'run 5\n' in text
 
 
-@pytest.mark.parametrize('seconds, shown', [(45, '45 s'), (720, '12 min'),
-                                            (5880, '1 h 38 min'), (183600, '2 d 3 h'),
-                                            (-1, '0 s')])
-def test_duration(seconds, shown):
-    assert duration(timedelta(seconds=seconds)) == shown
+@pytest.mark.parametrize('minutes, shown', [(14, '14 minutes'), (0.5, 'under a minute'),
+                                            (125, '2 hours 5 minutes')])
+def test_a_row_says_how_long_the_run_took_as_the_report_does(minutes, shown):
+    # The same words as the report's "taking 14 minutes" (messages.duration).
+    assert f' || {shown} || live || ' in row(minutes=minutes)

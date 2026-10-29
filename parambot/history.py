@@ -1,19 +1,20 @@
 """The report history page, User:ParamBot/ReportHistory: a row for each run.
 
 The report page is replaced on every run, so it only says what the latest
-one found.  The history page keeps a line for every run that saved anything
-(live and report-only runs), newest first, saying when it ran, what it did
-and how it ended:
+one found.  The history page keeps a line for every live and report-only
+run, newest first, saying when it ran, what it did and how it ended, except
+runs that didn't start because User:ParamBot/Run was off:
 
     {{User:ParamBot/Header}}
-    Every run of ParamBot that saved anything, newest first. ...
+    A line for every run of ParamBot, newest first, except runs that didn't
+    start because User:ParamBot/Run was off. ...
 
     {| class="wikitable"
     ! Started (UTC) !! Ended (UTC) !! Duration !! Mode !! Categories !! Checked !! Edits
       !! Needs review !! Result
     <!-- ParamBot: new runs go below this line -->
     |-
-    | 2026-10-27 04:00 || 2026-10-27 04:12 || 12 min || live || 3 of 41 || 57 || 52 || 2
+    | 2026-10-27 04:00 || 2026-10-27 04:12 || 12 minutes || live || 3 of 41 || 57 || 52 || 2
       || finished ([[Special:Permalink/123|report]])
     |}
 
@@ -23,9 +24,11 @@ marker is kept as it is, so the introduction can be edited by hand; the
 oldest rows go once there are MAX_ROWS.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
-__all__ = ['MARKER', 'MAX_ROWS', 'updated_page', 'history_row', 'duration']
+from . import messages as msg
+
+__all__ = ['MARKER', 'MAX_ROWS', 'updated_page', 'history_row']
 
 MARKER = '<!-- ParamBot: new runs go below this line -->'
 MAX_ROWS = 200   # 50 days of runs every 6 hours
@@ -61,25 +64,10 @@ def _rows(body: str) -> list[str]:
 def history_row(*, started: datetime, ended: datetime, mode: str, categories: str,
                 checked: int, edits: int, needing_review: int, result: str) -> str:
     """A run's row.  result is wikitext, saying how the run ended."""
-    cells = [_when(started), _when(ended), duration(ended - started), mode, categories,
-             str(checked), str(edits), str(needing_review), result]
+    cells = [_when(started), _when(ended), msg.duration((ended - started).total_seconds()),
+             mode, categories, str(checked), str(edits), str(needing_review), result]
     return '|-\n| ' + ' || '.join(cells) + '\n'
 
 
 def _when(moment: datetime) -> str:
     return f'{moment:%Y-%m-%d %H:%M}'
-
-
-def duration(elapsed: timedelta) -> str:
-    """elapsed as "45 s", "12 min", "1 h 38 min" or "2 d 3 h"."""
-    seconds = max(0, int(elapsed.total_seconds()))
-    days, seconds = divmod(seconds, 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, seconds = divmod(seconds, 60)
-    if days:
-        return f'{days} d {hours} h'
-    if hours:
-        return f'{hours} h {minutes} min'
-    if minutes:
-        return f'{minutes} min'
-    return f'{seconds} s'

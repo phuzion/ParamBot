@@ -970,10 +970,12 @@ def test_a_live_run_adds_a_line_to_the_history_page(tmp_path, monkeypatch):
     assert opts.history_page == f'User:{BOT}/ReportHistory'
     assert history.exists()   # created by the first run
     assert history.summaries == ['Adding a line for this run: finished']
-    assert history.text.startswith(f'{{{{User:{BOT}/Header}}}}\nEvery run of ')
+    assert history.text.startswith(
+        f'{{{{User:{BOT}/Header}}}}\nA line for every run of [[User:{BOT}|{BOT}]], newest '
+        f"first, except runs that didn't start because [[User:{BOT}/Run]] was off: ")
     revision = wiki.page(opts.report_page).latest_revision_id
     assert history_rows(wiki, opts) == [
-        '| 2026-10-27 04:00 || 2026-10-27 04:12 || 12 min || live || 1 of 1 || 1 || 1 || 0 '
+        '| 2026-10-27 04:00 || 2026-10-27 04:12 || 12 minutes || live || 1 of 1 || 1 || 1 || 0 '
         f'|| finished ([[Special:Permalink/{revision}|report]]) |}}']
 
 
