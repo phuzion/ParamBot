@@ -47,6 +47,7 @@ _SCHEMA: dict[str, dict[str, _Setting]] = {
         'rules': _Setting(str, 'rules_page'),
         'report': _Setting(str, 'report_page'),
         'run': _Setting(str, 'run_page'),
+        'history': _Setting(str, 'history_page'),
         'instructions': _Setting(str, 'instructions_page'),
         'faq': _Setting(str, 'faq_page'),
         'header': _Setting(str, 'header_page'),

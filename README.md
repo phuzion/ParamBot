@@ -62,6 +62,15 @@ replacement.
    it names. It ends with a comment naming the git commit of the bot that
    wrote it, such as `<!-- ParamBot 24cef13 -->`. It's saved on every run,
    so its history is a log of the runs.
+7. **Adds a line to the report history,** `User:ParamBot/ReportHistory`, on
+   live and report-only runs, newest first: when the run started and ended,
+   how long it took, whether it was live, a BRFA trial or reporting only, how
+   many categories had pages, and how many pages it checked, edited and left
+   for review. The last column says how the run ended (finished, finished
+   early and why, stopped by an error, or aborted by the Run page, saying
+   when it was changed and by whom), with a permanent link to the report it
+   saved. The bot creates the page if need be, and keeps the newest 200 lines;
+   anything above the table can be edited by hand.
 
 ## Safeguards
 
@@ -133,7 +142,10 @@ is due to expire, or if `User:ParamBot/Rules/Instructions`,
   lets a report-only run update the report, but still stops any run that
   would edit articles. After that
   it makes no more wiki edits, not even the report, which is written to a
-  local file instead.
+  local file instead. The one exception is its line on
+  `User:ParamBot/ReportHistory`, in the bot's own userspace, which says the
+  run was aborted, when the Run page was changed and by whom. A run that the
+  Run page stops before it starts adds no line.
 - **Large runs are flagged.** There's no limit on edits per run, but a run of
   more than 500 edits (`large_run`) gets a note on the report, so a rule that
   catches more than it should is noticed. `max_edits`, or `--max-edits N`,
@@ -361,7 +373,7 @@ Options for `run`:
 | `--template NAME` | all | Only use this template's rules. Can be repeated. |
 | `--page TITLE` | | Only check this page, skipping the categories. Can be repeated. |
 | `--any-namespace` | off | With `--page`, allow non-articles such as sandboxes. Dry runs only. |
-| `--report-page`, `--run-page` | `[pages] report`, `[pages] run` | Pages to use instead. |
+| `--report-page`, `--run-page`, `--history-page` | `[pages] report`, `[pages] run`, `[pages] history` | Pages to use instead. |
 | `--out-dir DIR` | `[output] dir` | Where dry runs, and live runs that can't save the report, write their files. |
 
 Without `--dry-run`, `--report-only` or `--live`, a run does what `mode` in
@@ -391,7 +403,7 @@ wiki is the English Wikipedia unless `--lang` or `--family` says otherwise.
 | Setting | Default | Meaning |
 |---|---|---|
 | `mode` | `"dry-run"` | What a plain `parambot run` does: `"dry-run"`, `"report-only"` or `"live"`. |
-| `[pages]` `rules`, `report`, `run`, `instructions`, `faq`, `header`, `link_rule` | `User:<bot>/Rules`, `/Report` and so on; `instructions` is the rules page's `/Instructions` | The bot's pages. The report page can't be one of the others. |
+| `[pages]` `rules`, `report`, `run`, `history`, `instructions`, `faq`, `header`, `link_rule` | `User:<bot>/Rules`, `/Report`, `/ReportHistory` and so on; `instructions` is the rules page's `/Instructions` | The bot's pages. The report page can't be one of the others. The history page must be a page of its own under `User:<bot>/`. |
 | `[limits]` `cooldown_days` | `30` | Don't edit a page the bot edited this recently. `0` turns it off. |
 | `[limits]` `max_hours` | `20` | Stop starting new work after this many hours, so a run is done before the next starts. The Toolforge job overrides it with `--max-hours 5`. `0` means no limit. |
 | `[limits]` `max_edits` | `0` | Stop after this many edits. `0` means no limit. |
@@ -485,7 +497,8 @@ job then does what the settings say.)
 A run goes `cli` → `bot`, which checks the bot's pages (`botpages`), finds
 and reads the rules pages (`rulespages`, `rules`), checks the rules against
 the templates (`prepare`), then applies the active ones to each article
-(`fixer`) and writes the report (`report`). Only `wiki` talks to the wiki.
+(`fixer`) and writes the report (`report`), and a line for the run on the
+report history (`history`). Only `wiki` talks to the wiki.
 
 | Path | Contents |
 |---|---|
@@ -502,6 +515,7 @@ the templates (`prepare`), then applies the active ones to each article
 | `parambot/templatescan.py` | Reading a template's own parameter checks, and wrapper templates; `scaffold`. |
 | `parambot/luapattern.py` | Lua patterns, as used in templates, translated to Python regexes. |
 | `parambot/report.py` | The report page. |
+| `parambot/history.py` | The report history page: a line for each run. |
 | `parambot/messages.py` | Everything the bot says on the report, in edit summaries and when it stops. |
 | `parambot/wiki.py` | Everything the bot asks of the wiki, through Pywikibot. |
 | `parambot/wikitext.py` | Small wikitext helpers. |

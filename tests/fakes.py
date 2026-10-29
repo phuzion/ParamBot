@@ -83,8 +83,10 @@ class FakePage:
     def __init__(self, title, text='', *, exists=True, redirect_to=None, model='wikitext',
                  templates=(), protection=None, editable=True, may_edit=True,
                  revisions=(), redirects=(), broken=False, save_error=None, on_save=None,
-                 revid=None, history=None, deleted_before_save=False):
+                 revid=None, history=None, deleted_before_save=False, wiki=None):
         self._title, self.text = title, text
+        # The wiki a missing page joins if it's saved: created, as on a real wiki.
+        self._wiki = wiki
         # Deleted after the bot loaded it: a save recreates it unless the
         # wiki is told not to create pages.
         self._deleted_before_save = deleted_before_save
@@ -139,6 +141,9 @@ class FakePage:
             raise self._save_error
         if nocreate and (self._deleted_before_save or not self._exists):
             raise pwb_exc.NoCreateError(0)   # MediaWiki's "missingtitle"
+        self._exists = True   # created, if it wasn't there
+        if self._wiki is not None:
+            self._wiki.pages.setdefault(self._title, self)
         self.text = self.text.rstrip()   # as MediaWiki saves it
         self.saved.append(self.text)
         self.summaries.append(summary)
@@ -191,7 +196,7 @@ class FakeWiki:
     def page(self, title, ns=0):
         if ns == 10 and not title.startswith('Template:'):
             title = 'Template:' + title
-        return self.pages.get(title) or FakePage(title, exists=False)
+        return self.pages.get(title) or FakePage(title, exists=False, wiki=self)
 
     def load(self, pages, *, templates=False):
         pages = list(pages)
@@ -214,6 +219,13 @@ class FakeWiki:
                     found[revid] = Revision(revid, page.title(), text, page.content_model,
                                             page.latest_revision_id)
         return found
+
+    def last_change(self, title):
+        page = self.pages.get(title)
+        if page is None or not page._exists or not page._revisions:
+            return None
+        revision = max(page._revisions, key=lambda r: r.timestamp)
+        return revision.timestamp, revision.user
 
     def subpages(self, title):
         self.requests['subpages'] += 1

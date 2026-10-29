@@ -13,6 +13,7 @@ from fakes import (
     OFFICEHOLDER_RULES,
     TEMPLATE_EDITOR,
     FakePage,
+    FakeRevision,
     FakeWiki,
     edited_by,
     link_rule,
@@ -28,6 +29,7 @@ from parambot.bot import (
     SUMMARY_LIMIT,
     CannotEdit,
     ParamBot,
+    RunPageOff,
     StopRun,
     edit_summary,
     read_trial_count,
@@ -947,6 +949,213 @@ def test_dry_run_carries_on_and_reports_setup_problems(tmp_path):
     text = only_report(tmp_path)
     assert '== Setup problems ==' in text
     assert 'is not protected' in text
+
+
+# -- the report history ----------------------------------------------------
+
+def history_rows(wiki, opts):
+    """The rows on the history page, newest first, each as one line."""
+    text = wiki.page(opts.history_page).text
+    return [row.replace('\n', ' ').strip() for row in text.split('|-\n')[1:]]
+
+
+def test_a_live_run_adds_a_line_to_the_history_page(tmp_path, monkeypatch):
+    times = iter([datetime(2026, 10, 27, 4, 0, tzinfo=UTC),
+                  datetime(2026, 10, 27, 4, 12, tzinfo=UTC)])
+    monkeypatch.setattr('parambot.bot._now', lambda: next(times))
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    ParamBot(wiki, opts).run()
+    history = wiki.page(opts.history_page)
+    assert opts.history_page == f'User:{BOT}/ReportHistory'
+    assert history.exists()   # created by the first run
+    assert history.summaries == ['Adding a line for this run: finished']
+    assert history.text.startswith(
+        f'{{{{User:{BOT}/Header}}}}\nA line for every run of [[User:{BOT}|{BOT}]], newest '
+        f"first, except runs that didn't start because [[User:{BOT}/Run]] was off: ")
+    revision = wiki.page(opts.report_page).latest_revision_id
+    assert history_rows(wiki, opts) == [
+        '| 2026-10-27 04:00 || 2026-10-27 04:12 || 12 minutes || live || 1 of 1 || 1 || 1 || 0 '
+        f'|| finished ([[Special:Permalink/{revision}|report]]) |}}']
+
+
+def test_each_run_adds_its_own_line_newest_first(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    ParamBot(wiki, opts).run()
+    first = wiki.page(opts.report_page).latest_revision_id
+    ParamBot(wiki, opts).run()
+    second = wiki.page(opts.report_page).latest_revision_id
+    rows = history_rows(wiki, opts)
+    assert len(rows) == 2
+    assert f'Permalink/{second}|' in rows[0] and f'Permalink/{first}|' in rows[1]
+
+
+def test_a_dry_run_adds_no_line(tmp_path):
+    opts = options(out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    ParamBot(wiki, opts).run()
+    assert wiki.page(opts.history_page).saved == []
+
+
+def test_reporting_only_adds_a_line_too(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    wiki.rights = set()
+    ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| reporting only || 1 of 1 || 1 || 1 || 0 || finished' in row
+
+
+def test_a_trial_says_so_on_the_history_page(tmp_path):
+    opts = trial(tmp_path)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| live (BRFA trial) ||' in row
+
+
+def test_switched_off_mid_run_the_history_says_who_aborted_it(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    changed = datetime(2026, 10, 27, 4, 7, tzinfo=UTC)
+
+    def switch_off():
+        run_page = wiki.page(opts.run_page)
+        run_page.text = 'no'
+        run_page._revisions.append(FakeRevision('Some editor', changed))
+    first, second = article('First', on_save=switch_off), article('Second')
+    wiki.populate(OFFICEHOLDER_CATEGORY, first, second)
+    with pytest.raises(RunPageOff):
+        ParamBot(wiki, opts).run()
+    assert wiki.page(opts.report_page).saved == []   # still not the report
+    [row] = history_rows(wiki, opts)
+    # Second was checked, but not edited.
+    assert ('|| live || 1 of 1 || 2 || 1 || 0 || aborted: [[User:ExampleBot/Run]] was changed '
+            'at 2026-10-27 04:07 by [[User:Some editor|Some editor]], so the run stopped: '
+            'User:ExampleBot/Run no longer says "yes"; stopped before editing Second') in row
+    assert 'Permalink' not in row   # no report was saved
+    assert wiki.page(opts.history_page).summaries == [
+        'Adding a line for this run: aborted by the Run page']
+
+
+def test_the_history_explains_an_abort_even_without_the_run_pages_history(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+
+    def switch_off():
+        wiki.page(opts.run_page).text = 'no'
+    wiki.populate(OFFICEHOLDER_CATEGORY, article('First', on_save=switch_off), article('Second'))
+    wiki.last_change = lambda title: (_ for _ in ()).throw(ConnectionError('API down'))
+    with pytest.raises(RunPageOff):
+        ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| aborted: [[User:ExampleBot/Run]] was changed, so the run stopped: ' in row
+
+
+def test_reporting_only_switched_off_mid_run_is_explained_in_the_history(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    members = wiki.category_members
+
+    def switched_off_while_polling(*args):
+        wiki.page(opts.run_page).text = 'no'
+        return members(*args)
+    wiki.category_members = switched_off_while_polling
+    ParamBot(wiki, opts).run()
+    assert wiki.page(opts.report_page).saved == []
+    [row] = history_rows(wiki, opts)
+    assert ('|| reporting only || 1 of 1 || 1 || 1 || 0 || aborted: [[User:ExampleBot/Run]] '
+            'was changed, so the run stopped: User:ExampleBot/Run no longer says') in row
+
+
+def test_switched_off_before_the_run_adds_no_line(tmp_path):
+    # Every scheduled run while the bot is off would add one otherwise.
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts, **{opts.run_page: FakePage(opts.run_page, 'no')})
+    with pytest.raises(StopRun):
+        ParamBot(wiki, opts).run()
+    assert wiki.page(opts.history_page).saved == []
+
+
+def test_a_run_that_ends_early_says_why_in_the_history(tmp_path):
+    opts = options(live=True, max_edits=1, out_dir=str(tmp_path))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('First'), article('Second'))
+    ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| finished early: Stopped after 1 edit (max_edits). ([[Special:Permalink/' in row
+    assert wiki.page(opts.history_page).summaries == [
+        'Adding a line for this run: finished early']
+
+
+def test_a_crash_is_on_the_history_page(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    wiki.fail_polling = ConnectionError('API down')
+    with pytest.raises(ConnectionError):
+        ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| error: The run stopped early because of an error: ConnectionError: ' in row
+    assert '<nowiki>API down</nowiki>' in row
+
+
+def test_a_save_error_every_edit_would_hit_is_on_the_history_page(tmp_path):
+    opts = options(live=True, out_dir=str(tmp_path))
+    blocked = pwb_exc.OtherPageSaveError(0, pwb_exc.APIError('blocked', 'Blocked'))
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane', save_error=blocked))
+    with pytest.raises(CannotEdit):
+        ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| error: Stopped before editing any more articles' in row
+
+
+def test_a_stop_other_than_the_run_page_is_on_the_history_page(tmp_path, monkeypatch):
+    opts = trial(tmp_path)
+    wiki = wiki_for(opts).populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+
+    def cannot_save(path, made):
+        raise OSError('disk full')
+    monkeypatch.setattr('parambot.bot.write_trial_count', cannot_save)
+    with pytest.raises(StopRun):
+        ParamBot(wiki, opts).run()
+    [row] = history_rows(wiki, opts)
+    assert '|| stopped: ' in row
+
+
+def test_a_history_page_that_cannot_be_saved_does_not_stop_the_run(tmp_path, caplog):
+    opts = options(live=True, out_dir=str(tmp_path))
+    unsaveable = FakePage(opts.history_page, '', save_error=ConnectionError('wiki unreachable'))
+    wiki = wiki_for(opts, **{opts.history_page: unsaveable})
+    wiki.populate(OFFICEHOLDER_CATEGORY, article('Jane Example'))
+    assert ParamBot(wiki, opts).run().edits == 1
+    assert wiki.page(opts.report_page).saved
+    assert f'Could not add this run to {opts.history_page}' in caplog.messages
+
+
+@pytest.mark.parametrize('history_page', [
+    'Wikipedia:Sandbox', f'User:{BOT}Two/ReportHistory', f'User:{BOT}/Run',
+    f'User:{BOT}/Rules/Infobox officeholder', f'User:{BOT}/BRFA Log'])
+def test_the_history_page_must_be_the_bots_own(tmp_path, history_page):
+    opts = options(live=True, history_page=history_page, out_dir=str(tmp_path))
+    wiki = wiki_for(opts)
+    with pytest.raises(StopRun, match='the report history, must be a page of its own'):
+        ParamBot(wiki, opts).run()
+    assert not wiki.logged_in
+
+
+def test_the_report_never_replaces_the_history_page(tmp_path):
+    opts = options(live=True, report_page=f'User:{BOT}/ReportHistory', out_dir=str(tmp_path))
+    with pytest.raises(StopRun, match='which is the report history'):
+        ParamBot(wiki_for(opts), opts).run()
+
+
+def test_reporting_only_may_save_the_history_page_too(tmp_path):
+    opts = options(report_only=True, out_dir=str(tmp_path))
+    bot = ParamBot(wiki_for(opts), opts)
+    bot._check_may_save(opts.history_page)
+    with pytest.raises(RuntimeError, match=f'may edit are {opts.report_page} and '
+                                           f'{opts.history_page}'):
+        bot._check_may_save('Wikipedia:Sandbox')
 
 
 # -- failures --------------------------------------------------------------

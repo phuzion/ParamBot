@@ -304,3 +304,23 @@ def test_category_members_in_the_namespaces_asked_for(monkeypatch):
     monkeypatch.setattr('parambot.wiki.pywikibot.Category', Category)
     assert list(Wiki(Pages()).category_members('Category:C', (0,))) == ['Article']
     assert asked == ['Category:C', [0]]
+
+
+class Revisions:
+    """Enough of a Pywikibot page for last_change."""
+
+    def __init__(self, exists):
+        self._exists = exists
+        self.latest_revision = type('Revision', (), {
+            'timestamp': datetime(2026, 10, 27, 4, 7, tzinfo=UTC), 'user': 'Some editor'})()
+
+    def exists(self):
+        return self._exists
+
+
+def test_last_change_says_when_and_by_whom(monkeypatch):
+    monkeypatch.setattr('parambot.wiki.pywikibot.Page', lambda site, title: Revisions(True))
+    assert Wiki(Site()).last_change('User:ParamBot/Run') == (
+        datetime(2026, 10, 27, 4, 7, tzinfo=UTC), 'Some editor')
+    monkeypatch.setattr('parambot.wiki.pywikibot.Page', lambda site, title: Revisions(False))
+    assert Wiki(Site()).last_change('User:ParamBot/Run') is None
