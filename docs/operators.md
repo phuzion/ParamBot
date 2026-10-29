@@ -251,7 +251,8 @@ create it.
 Every line also goes straight into `~/parambot/out/trial-log.mediawiki`. If
 the bot can't save the log page, the report says so, and the lines are in
 that file to paste. That includes a run switched off part-way, which makes
-no more wiki edits, the log included.
+no more wiki edits but its line on User:ParamBot/ReportHistory, so it
+doesn't add to the log page.
 
 ```bash
 cat trial-edits.txt                # the count so far

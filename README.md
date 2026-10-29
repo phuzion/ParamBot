@@ -69,8 +69,9 @@ replacement.
    for review. The last column says how the run ended (finished, finished
    early and why, stopped by an error, or aborted by the Run page, saying
    when it was changed and by whom), with a permanent link to the report it
-   saved. The bot creates the page if need be, and keeps the newest 200 lines;
-   anything above the table can be edited by hand.
+   saved. The page must exist first, like the bot's other pages (see step 4
+   of [Deploying on Toolforge](#deploying-on-toolforge)). The bot keeps the
+   newest 200 lines; anything above the table can be edited by hand.
 
 ## Safeguards
 
@@ -470,6 +471,8 @@ updates, stopping it, trials and common problems.
      [`docs/talk-page.mediawiki`](docs/talk-page.mediawiki); the FAQ sends
      people there to report bad edits
    - `User:ParamBot/Report`, a placeholder
+   - `User:ParamBot/ReportHistory`, a placeholder, which the first run
+     replaces with the table
    - `User:ParamBot/Header`, a copy of
      [`docs/header.mediawiki`](docs/header.mediawiki): the links across the
      top of the bot's pages, which the bot puts at the top of the report

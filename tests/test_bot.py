@@ -580,7 +580,8 @@ def test_a_local_copy_that_cannot_be_written_doesnt_stop_the_trial(tmp_path, cap
 
 
 def test_a_trial_switched_off_mid_run_keeps_its_log_locally(tmp_path, caplog):
-    # Switched off, the bot makes no more wiki edits, the log included.
+    # Switched off, the bot makes no more wiki edits but its history line,
+    # so the log isn't saved.
     opts = trial(tmp_path)
 
     def switch_off():

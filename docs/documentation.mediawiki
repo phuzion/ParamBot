@@ -221,7 +221,7 @@ Until then, the report notes that the page has changed, with a link to the chang
 |}
 
 == Stopping it ==
-* '''Stop the bot at once:''' change [[User:ParamBot/Run]] to <code>no</code>. Anyone can; the page is deliberately unprotected. The bot checks it before every edit, so it stops straight away, even in the middle of a run, and makes no more edits until the page says <code>yes</code> again.
+* '''Stop the bot at once:''' change [[User:ParamBot/Run]] to <code>no</code>. Anyone can; the page is deliberately unprotected. The bot checks it before every edit, so it stops straight away, even in the middle of a run, and makes no more edits until the page says <code>yes</code> again, apart from one line on [[User:ParamBot/ReportHistory]] saying the run was stopped.
 * '''One bad edit:''' revert it and say what happened on [[User talk:ParamBot]]. The bot won't edit that article again for 30 days.
 * '''Keep it off one article for good:''' add {{tlx|bots|deny{{=}}ParamBot}} to the article.
 * '''Stop one template's rules:''' move its line on [[User:ParamBot/Rules]] from Active to Inactive (template editors), or ask on [[User talk:ParamBot]].
